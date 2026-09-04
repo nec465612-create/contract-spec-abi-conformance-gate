@@ -26,7 +26,7 @@ def _address_hex(value) -> str:
     if isinstance(value, (bytes, bytearray)):
         raw = bytes(value)
         if len(raw) != 20:
-            raise gl.UserError("BAD_ADDRESS")
+            raise gl.vm.UserError("BAD_ADDRESS")
         return "0x" + raw.hex()
     return value.as_hex.lower()
 
@@ -64,7 +64,7 @@ class ContractSpecAbiRuntimeProbe(gl.Contract):
         def leader():
             result = gl.nondet.exec_prompt(prompt, response_format="json")
             if not _valid_result(result):
-                raise gl.UserError("MALFORMED_RESULT")
+                raise gl.vm.UserError("MALFORMED_RESULT")
             return result
 
         def validator(proposed):
