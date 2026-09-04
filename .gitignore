@@ -1,0 +1,11 @@
+__pycache__/
+.pytest_cache/
+*.py[cod]
+contract-schema.json
+probe-schema.json
+artifacts/
+frontend/node_modules/
+frontend/dist/
+.vercel/
+.env*
+!.env.example
