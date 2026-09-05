@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none" role="img" aria-label="MetaMask">
+  <rect width="40" height="40" rx="8" fill="#FFFFFF"/>
+  <path d="M32.8 9.5L21.3 17.9L23.4 12.8L32.8 9.5Z" fill="#E2761B" stroke="#E2761B" stroke-width="0.3"/>
+  <path d="M7.2 9.5L18.6 18L16.6 12.8L7.2 9.5Z" fill="#E4761B" stroke="#E4761B" stroke-width="0.3"/>
+  <path d="M29.5 25.4L26.5 29.9L32.1 31.4L33.7 25.5L29.5 25.4Z" fill="#E4761B" stroke="#E4761B" stroke-width="0.3"/>
+  <path d="M6.3 25.5L7.9 31.4L13.5 29.9L10.5 25.4L6.3 25.5Z" fill="#E4761B" stroke="#E4761B" stroke-width="0.3"/>
+  <path d="M13.2 19.3L11.7 21.6L17.2 21.9L17 16L13.2 19.3Z" fill="#E4761B" stroke="#E4761B" stroke-width="0.3"/>
+  <path d="M26.8 19.3L22.9 15.9L22.8 21.9L28.3 21.6L26.8 19.3Z" fill="#E4761B" stroke="#E4761B" stroke-width="0.3"/>
+  <path d="M13.5 29.9L16.8 28.3L14 25.6L10.5 25.4L13.5 29.9Z" fill="#D7C1B3" stroke="#D7C1B3" stroke-width="0.3"/>
+  <path d="M26.5 29.9L29.5 25.4L26 25.6L23.2 28.3L26.5 29.9Z" fill="#D7C1B3" stroke="#D7C1B3" stroke-width="0.3"/>
+  <path d="M16.8 28.3L20 30.5L23.2 28.3L23.5 25.6L20 23.9L16.5 25.6L16.8 28.3Z" fill="#233447" stroke="#233447" stroke-width="0.3"/>
+  <path d="M20 30.5L16.8 28.3L17.5 32.5L20 33.8L22.5 32.5L23.2 28.3L20 30.5Z" fill="#CD6116" stroke="#CD6116" stroke-width="0.3"/>
+  <path d="M29.5 25.4L33.7 25.5L34.9 20.3L32.8 9.5L21.3 17.9L26.8 19.3L28.3 21.6L26 25.6L29.5 25.4Z" fill="#F6851B" stroke="#F6851B" stroke-width="0.3"/>
+  <path d="M10.5 25.4L14 25.6L11.7 21.6L13.2 19.3L18.6 18L7.2 9.5L5.1 20.3L6.3 25.5L10.5 25.4Z" fill="#F6851B" stroke="#F6851B" stroke-width="0.3"/>
+  <path d="M22.8 21.9L22.9 15.9L23.4 12.8L20 10.3L16.6 12.8L17 16L17.2 21.9L20 23.9L22.8 21.9Z" fill="#F6851B" stroke="#F6851B" stroke-width="0.3"/>
+</svg>

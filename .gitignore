@@ -1,6 +1,7 @@
 __pycache__/
 .pytest_cache/
 *.py[cod]
+*.tsbuildinfo
 contract-schema.json
 probe-schema.json
 artifacts/
