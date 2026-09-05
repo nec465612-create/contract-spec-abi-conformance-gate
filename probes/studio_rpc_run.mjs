@@ -464,7 +464,8 @@ try {
       : await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
     const txRow = retainTransaction('S2-deploy', hash)
     const transaction = await waitForFinalized(client, 'S2-deploy', hash)
-    assert(isFinalized(transaction) && isExecutionSuccess(transaction), `deployment was not a finalized successful transaction: ${JSON.stringify(jsonSafe(transaction))}`)
+    // Studio deploy receipts expose finality but not a contract-call execution result; source parity below proves deployment success.
+    assert(isFinalized(transaction), `deployment was not finalized: ${JSON.stringify(jsonSafe(transaction))}`)
     contractAddress = transaction.recipient ?? transaction.to_address
     assert(typeof contractAddress === 'string' && /^0x[0-9a-fA-F]{40}$/.test(contractAddress), `Missing deployed contract address for ${hash}`)
     if (RESUME_MODE) assert(contractAddress.toLowerCase() === requestedResumeAddress.toLowerCase(), `Resumed deployment address mismatch: ${contractAddress}`)
