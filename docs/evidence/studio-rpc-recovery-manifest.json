@@ -12,6 +12,13 @@
     "sourceReadbackSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45"
   },
   "priorRun": {
+    "requestSequence": 52,
+    "transactionCount": 5,
+    "blockedAt": "S6-evaluate-case1",
+    "error": "The active replacement deployment finalized through freeze_case and stopped at evaluate_case after a bounded finality timeout; the later sparse read confirmed FINALIZED MAJORITY_DISAGREE without state mutation.",
+    "fullEvidenceFile": "studio-rpc-run-1788609388641.json"
+  },
+  "historicalInitialRun": {
     "requestSequence": 17,
     "transactionCount": 1,
     "blockedAt": "S3-create-case1",
