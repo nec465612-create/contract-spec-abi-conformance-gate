@@ -1,0 +1,43 @@
+{
+  "status": "HEALTHY_PARTIAL_READINESS",
+  "kind": "READ_ONLY_STUDIO_PLATFORM_HEALTH_RECOVERY_WINDOW",
+  "endpoint": "https://studio.genlayer.com/health",
+  "httpStatus": 200,
+  "stateChangingRequests": 0,
+  "usedForReleaseAuthorization": false,
+  "samples": [
+    {
+      "timestamp": 1788617974.6198378,
+      "status": "healthy",
+      "issues": [],
+      "processing_transactions": 2,
+      "orphaned_transactions": 0,
+      "consensus": "healthy",
+      "stuck_finalization_count": 1,
+      "max_recovery_exhausted_count": 0,
+      "no_progress_backlog_count": 54,
+      "no_progress_check_error": true,
+      "no_progress_scan_suppressed": true,
+      "llm_providers": "healthy"
+    },
+    {
+      "timestamp": 1788617987.2181087,
+      "status": "healthy",
+      "issues": [],
+      "processing_transactions": 1,
+      "orphaned_transactions": 0,
+      "consensus": "healthy",
+      "stuck_finalization_count": 1,
+      "max_recovery_exhausted_count": 0,
+      "no_progress_backlog_count": 53,
+      "no_progress_check_error": true,
+      "no_progress_scan_suppressed": true,
+      "llm_providers": "healthy"
+    }
+  ],
+  "readinessPredicate": {
+    "requiredConsecutiveSamples": 2,
+    "passed": false,
+    "reason": "Top-level and consensus health recovered, but stuck_finalization_count remains 1 and no_progress_check_error/no_progress_scan_suppressed remain set."
+  }
+}

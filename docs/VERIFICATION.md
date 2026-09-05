@@ -28,6 +28,8 @@ The timestamped read-only Studio platform health response is preserved in [studi
 
 Three further read-only health samples over the next check intervals are preserved in [studio-platform-health-window-1788613802.json](evidence/studio-platform-health-window-1788613802.json). All remained `DEGRADED` with the same recovery exhaustion, stuck finalization, and failed/suppressed progress checks; the readiness predicate therefore remains false.
 
+The later recovery window is preserved in [studio-platform-health-recovery-window-1788617987.json](evidence/studio-platform-health-recovery-window-1788617987.json). Two read-only samples returned top-level and consensus `HEALTHY`, with no exhausted recovery and no orphaned transactions; however, `stuck_finalization_count=1` and the progress-check flags remain, so this is partial recovery evidence and not replacement authorization.
+
 ## Historical frozen UI binding (not current measured run)
 
 | Field | Value |
