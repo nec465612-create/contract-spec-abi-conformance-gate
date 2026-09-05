@@ -1,0 +1,27 @@
+{
+  "status": "DIAGNOSTIC_CONFIRMED_FINALIZED",
+  "kind": "READ_ONLY_TRANSACTION_STATUS_PAYLOAD_COMPATIBILITY",
+  "endpoint": "https://studio.genlayer.com/api",
+  "chainId": 61999,
+  "transactionHash": "0x64c5797c62daf1ecf76c3b53d4a604ada4b52464920ccfaac125955fe80a5fca",
+  "requests": [
+    {
+      "method": "gen_getTransactionStatus",
+      "paramsShape": "[txHash]",
+      "httpStatus": 200,
+      "result": "FINALIZED"
+    },
+    {
+      "method": "gen_getTransactionLifecycle",
+      "paramsShape": "[txHash]",
+      "httpStatus": 200,
+      "rpcError": {
+        "code": -32601,
+        "message": "Method not found: gen_getTransactionLifecycle"
+      }
+    }
+  ],
+  "stateChangingRequests": 0,
+  "usedForReleaseAuthorization": false,
+  "note": "The documented object-shaped gen_getTransactionStatus payload previously returned a backend parameter-adaptation error. The string-shaped compatibility payload confirms FINALIZED. No alternate write, appeal, retry, or lifecycle action was attempted. This confirms finality and backend method availability only; it does not override the full receipt or readiness gate."
+}

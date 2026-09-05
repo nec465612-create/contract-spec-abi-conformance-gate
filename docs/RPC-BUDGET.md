@@ -78,6 +78,8 @@ The latest stop was not a rate-limit or runner-classification defect. `evaluate_
 
 After that terminal evidence, one separate read-only `gen_getTransactionStatus` diagnostic was attempted against the retained S6 hash. The endpoint returned HTTP 200 with RPC error `-32603` because it could not adapt the object-shaped parameter; no alternate payload was retried. The diagnostic is preserved in [studio-rpc-status-diagnostic-1788612789642.json](evidence/studio-rpc-status-diagnostic-1788612789642.json), records zero state-changing requests, and is not part of the measured S0–S12 request total or release authorization.
 
+A bounded follow-up read-only compatibility diagnostic is preserved in [studio-rpc-status-string-compat-1788618280.json](evidence/studio-rpc-status-string-compat-1788618280.json). Sending the retained hash as the documented method's string-shaped parameter returned HTTP 200 and `FINALIZED`; the unavailable lifecycle method returned `-32601`. This resolves the payload-shape ambiguity without a write, retry, appeal, or alternate lifecycle action. It is out-of-band diagnostic evidence: zero state-changing requests, not part of the S0–S12 total, and not release authorization.
+
 The earlier rate-limited replacement attempt remains retained as `studio-rpc-run-1788608380680.json`: S0-funding `1/1`, request sequence `1`, transaction count `0`, and no deployment or case write. Its separate sparse read confirmed the prior deployment state. It was not retried automatically.
 
 ### Historical frozen UI status (not the new measured run)
