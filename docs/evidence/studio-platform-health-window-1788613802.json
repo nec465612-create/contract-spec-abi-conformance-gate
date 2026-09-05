@@ -1,0 +1,51 @@
+{
+  "status": "NOT_READY",
+  "kind": "READ_ONLY_STUDIO_PLATFORM_HEALTH_WINDOW",
+  "endpoint": "https://studio.genlayer.com/health",
+  "httpStatus": 200,
+  "stateChangingRequests": 0,
+  "usedForReleaseAuthorization": false,
+  "samples": [
+    {
+      "timestamp": 1788613780.2783623,
+      "status": "degraded",
+      "issues": ["max_recovery_cycles_exhausted"],
+      "consensus": "degraded",
+      "stuck_finalization_count": 1,
+      "max_recovery_exhausted_count": 1,
+      "no_progress_backlog_count": 50,
+      "no_progress_check_error": true,
+      "no_progress_scan_suppressed": true,
+      "llm_providers": "healthy"
+    },
+    {
+      "timestamp": 1788613792.0382864,
+      "status": "degraded",
+      "issues": ["max_recovery_cycles_exhausted"],
+      "consensus": "degraded",
+      "stuck_finalization_count": 1,
+      "max_recovery_exhausted_count": 1,
+      "no_progress_backlog_count": 50,
+      "no_progress_check_error": true,
+      "no_progress_scan_suppressed": true,
+      "llm_providers": "healthy"
+    },
+    {
+      "timestamp": 1788613802.6197522,
+      "status": "degraded",
+      "issues": ["max_recovery_cycles_exhausted"],
+      "consensus": "degraded",
+      "stuck_finalization_count": 1,
+      "max_recovery_exhausted_count": 1,
+      "no_progress_backlog_count": 50,
+      "no_progress_check_error": true,
+      "no_progress_scan_suppressed": true,
+      "llm_providers": "healthy"
+    }
+  ],
+  "readinessPredicate": {
+    "requiredConsecutiveSamples": 2,
+    "passed": false,
+    "reason": "Studio consensus/recovery remained degraded across all three samples."
+  }
+}

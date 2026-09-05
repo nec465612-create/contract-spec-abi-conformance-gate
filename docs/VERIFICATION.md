@@ -26,6 +26,8 @@ A single later read-only status diagnostic is preserved in [studio-rpc-status-di
 
 The timestamped read-only Studio platform health response is preserved in [studio-platform-health-1788613593.json](evidence/studio-platform-health-1788613593.json). It returned HTTP 200 with `status=degraded`, `max_recovery_cycles_exhausted`, one stuck finalization, and a 46-transaction no-progress backlog; GenVM and LLM providers were healthy. The platform artifact is external operational evidence for the current validator/consensus blocker, not readiness or release authorization.
 
+Three further read-only health samples over the next check intervals are preserved in [studio-platform-health-window-1788613802.json](evidence/studio-platform-health-window-1788613802.json). All remained `DEGRADED` with the same recovery exhaustion, stuck finalization, and failed/suppressed progress checks; the readiness predicate therefore remains false.
+
 ## Historical frozen UI binding (not current measured run)
 
 | Field | Value |
