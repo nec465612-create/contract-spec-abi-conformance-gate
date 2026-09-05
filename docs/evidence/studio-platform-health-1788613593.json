@@ -1,0 +1,74 @@
+{
+  "status": "DEGRADED",
+  "kind": "READ_ONLY_STUDIO_PLATFORM_HEALTH",
+  "endpoint": "https://studio.genlayer.com/health",
+  "httpStatus": 200,
+  "observedAtUnixSeconds": 1788613593.3545804,
+  "stateChangingRequests": 0,
+  "usedForReleaseAuthorization": false,
+  "response": {
+    "status": "degraded",
+    "timestamp": 1788613593.3545804,
+    "cache_age_ms": 5965.21,
+    "last_check_duration_ms": 1820.03,
+    "issues": [
+      "max_recovery_cycles_exhausted"
+    ],
+    "services": {
+      "genvm": {
+        "status": "healthy",
+        "max_permits": 13,
+        "available_permits": 13,
+        "current_permits": 0,
+        "active_executions": 0
+      },
+      "database": {
+        "status": "healthy",
+        "pool_size": 10,
+        "checked_out": 0
+      },
+      "consensus": {
+        "processing_transactions": 1,
+        "orphaned_transactions": 0,
+        "stuck_finalization_count": 1,
+        "recovery_storm_count": 0,
+        "max_recovery_count": 0,
+        "max_recovery_exhausted_count": 1,
+        "max_recovery_exhausted_transactions": [
+          {
+            "hash": "0xc6f16b4cef9c1e58e358431fdf049e05ccb0a94fd51992f066739063c30cdc72",
+            "contract_address": "0x2c43B5282af2Fc73bdef578E82EeAA78BB5346DB",
+            "recovery_count": 3,
+            "exhausted_at": 1788612732
+          }
+        ],
+        "no_consensus_progress": false,
+        "no_progress_backlog_count": 46,
+        "seconds_since_consensus_progress": null,
+        "no_progress_check_error": true,
+        "no_progress_scan_suppressed": true,
+        "active_workers": 1,
+        "status": "degraded"
+      },
+      "llm_providers": {
+        "status": "healthy",
+        "alert_providers": [],
+        "window_minutes": 15,
+        "total_samples": 371
+      },
+      "memory": {
+        "status": "healthy",
+        "usage_mb": 686.4609375,
+        "percent": 1.0851983256227322,
+        "cpu_percent": 0.0
+      },
+      "redis": "healthy"
+    },
+    "meta": {
+      "pid": 1,
+      "workers": "1",
+      "check_interval_s": 10.0
+    }
+  },
+  "note": "Read-only platform health evidence captured after the finalized evaluate_case TIMEOUT. The exhausted transaction listed by the platform is not claimed to be the project transaction; this artifact proves the shared Studio consensus/recovery service was degraded at capture time, not readiness for a replacement run."
+}

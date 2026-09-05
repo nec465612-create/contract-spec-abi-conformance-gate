@@ -24,6 +24,8 @@ The accepted owner-bound case creator key was not retained, so the current deplo
 
 A single later read-only status diagnostic is preserved in [studio-rpc-status-diagnostic-1788612789642.json](evidence/studio-rpc-status-diagnostic-1788612789642.json). The endpoint returned an RPC parameter error; no alternate payload or state-changing request was attempted. This diagnostic does not override the existing full/sparse authoritative evidence or claim validator readiness.
 
+The timestamped read-only Studio platform health response is preserved in [studio-platform-health-1788613593.json](evidence/studio-platform-health-1788613593.json). It returned HTTP 200 with `status=degraded`, `max_recovery_cycles_exhausted`, one stuck finalization, and a 46-transaction no-progress backlog; GenVM and LLM providers were healthy. The platform artifact is external operational evidence for the current validator/consensus blocker, not readiness or release authorization.
+
 ## Historical frozen UI binding (not current measured run)
 
 | Field | Value |
