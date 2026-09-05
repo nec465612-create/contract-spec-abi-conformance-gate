@@ -1,6 +1,6 @@
 # RPC budget matrix
 
-Status: POST_DEPLOY_TEST CHANGES REQUIRED. The original PRE_DEPLOY matrices remain below as historical plan templates. The live Studio evidence is recorded separately; RPC-STUDIO-001 remains open and the frontend release evidence is intentionally pending Vercel E2E.
+Status: PRE_DEPLOY CHANGES REQUIRED. The original frozen Studio run remains historical evidence only; its RPC-STUDIO-001 measurement gap is not being replayed. The corrected measured runner is awaiting refreshed anonymous PRE_DEPLOY review, and frontend release evidence remains intentionally pending Vercel E2E.
 
 Revision binding: the live Studio ledger binds to source commit de66367b459ed421b73bdfb7f3d04bf15088ed38, contract source SHA-256 AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45, chain 61999, contract 0x6de11297EaF221eb95A9E34e5A0e418061789250, and account 0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902. Studio and frontend budgets are separate ledgers. A result in one ledger cannot satisfy the other.
 
@@ -9,34 +9,40 @@ Revision binding: the live Studio ledger binds to source commit de66367b459ed421
 - Every RPC request, retry attempt, receipt query, readback, and wallet-provider request is counted in the evidence for the operation that triggered it.
 - Reads use one shared FIFO queue. A hidden document pauses scheduled polling; it does not create a second poller. A new request is not submitted to compensate for a paused or uncertain read.
 - Retry-After is honored. Retries are bounded; when the bound is exhausted, the hash/journal or read state is preserved and the UI stops automatic work.
-- The implementation spends one request slot before every retry attempt: explicit list/detail reads are capped at one network attempt; a write has at most three finality attempts and two authoritative readback attempts; reconciliation has one receipt attempt and two readback attempts. A retry cannot silently amplify a row beyond its matrix maximum.
+- The frontend implementation spends one request slot before every retry attempt: explicit list/detail reads are capped at one network attempt; a frontend write has at most three finality attempts and two authoritative readback attempts; frontend reconciliation has one receipt attempt and two readback attempts. The Studio runner uses its separate S0–S12 caps below, including four scheduled finality checks where declared. A retry cannot silently amplify a row beyond its matrix maximum.
 - Cache keys include chain, contract, method, and arguments. A mutation or explicit refresh invalidates the relevant cache before authoritative readback.
 - No full-portfolio or interval polling is used. The landing view performs zero automatic chain reads.
 
 ## STUDIO RPC BUDGET MATRIX
 
-Scope: Studio UI, Studio/RPC deployment workflow, and the bounded Studionet E2E run. These rows are independent of the browser frontend matrix.
+Scope: the measured disposable Studionet runner and the Studio deployment workflow. This ledger is independent of the browser frontend matrix. The runner enforces these row-specific caps before sending a request; a cap overflow stops the operation and cannot trigger a resubmission.
 
 | ID | Trigger / operation | RPC or Studio action | Planned maximum | Schedule / retry rule | Transaction maximum | Terminal condition and stop rule |
 |---|---|---|---:|---|---:|---|
-| S0 | Open Studio and select the locked account/network | Network check, account check, selected project/source metadata check | 4 requests total | One pass; no background refresh | 0 | Stop if chain/account/source does not match the locked PRE_DEPLOY package |
-| S1 | Confirm source and ABI/schema before deployment | Source hash, schema/ABI, and deployment-input probes | 3 reads | One pass; no duplicate probe after a matching result | 0 | Stop on any source/schema/hash mismatch |
-| S2 | Deploy the exact contract once | Deployment submission, bounded status checks, terminal receipt, deployed-source readback | 1 submit + 4 status/receipt checks + 1 source readback | Status at 10/20/40/80 seconds; honor Retry-After; no unbounded SDK poller | 1 | Stop after terminal receipt or after the fourth bounded status check; preserve the deployment hash |
-| S3 | Create one case | Write submission, terminal receipt/status, `get_id_by_nonce`, version-1 readback | 1 submit + 4 status/receipt checks + 2 readbacks | One unique nonce; no automatic resubmit; cooldown is observed | 1 | Stop when the receipt is terminal and nonce/version readback agrees |
-| S4 | Freeze one case | Write submission, terminal receipt/status, next-version readback | 1 submit + 4 status/receipt checks + 1 readback | One unique operation; retry only inside the bounded status/read policy | 1 | Stop on finalized success, finalized error with failure readback, or reconciliation-required |
-| S5 | Evaluate one case | Write submission, terminal receipt/status, next-version semantic readback | 1 submit + 4 status/receipt checks + 1 readback | Do not poll validators indefinitely; preserve evidence on timeout | 1 | Stop only after finality/consensus and semantic outcome readback are authoritative |
-| S6 | Retry one unresolved case | Write submission, terminal receipt/status, next-version semantic readback | 1 submit + 4 status/receipt checks + 1 readback | Respect the contract cooldown; no second retry for the same intent | 1 | Stop after the bounded attempt and authoritative history check |
-| S7 | Explicit reconciliation of one retained hash | Receipt lookup, then the required historical/semantic readback | 1 receipt + 2 readbacks | One explicit user action; no parallel reconciliation beyond the two-entry UI limit | 0 | Stop at `FINALIZED`, `VERIFIED`, `FINALIZED_ERROR`, or `RECONCILIATION_REQUIRED` |
+| S0-funding | Fund one disposable account exactly once | `sim_fundAccount` | 1 | One request; no retry | 0 | Stop on any funding error |
+| S0-preflight | Check chain, account, and balance | `eth_chainId`, `eth_getBalance` | 2 | One pass; no background refresh | 0 | Stop if chain is not 61999 or balance is unavailable |
+| S1-schema | Verify exact source schema before deployment | `gen_getContractSchemaForCode` | 1 | One pass; no duplicate schema probe | 0 | Stop on source/schema/hash mismatch |
+| S2-deploy | Deploy the exact contract once | SDK submission envelope, four bounded finality checks, deployed-source readback | 13 | Finality schedule 10/20/40/80 seconds; request timeout 30s; operation deadline 240s; no automatic retry | 1 | Stop at finality, cap overflow, timeout, or source-parity failure; preserve the hash immediately |
+| S3-create-case1 | Create case 1 | SDK submission envelope, four bounded finality checks, `get_id_by_nonce`, `get_case` | 14 | One unique nonce; one-shot submission fuse; no resubmit | 1 | Stop when terminal receipt and both readbacks agree |
+| S4-replace-case1 | Replace case 1 base | SDK submission envelope, four bounded finality checks, `get_case`, `get_version` | 14 | One unique operation; no resubmit | 1 | Stop on final success/error or reconciliation-required |
+| S5-freeze-case1 | Freeze case 1 | SDK submission envelope, four bounded finality checks, `get_case`, `get_version` | 14 | One unique operation; no resubmit | 1 | Stop on final success/error or reconciliation-required |
+| S6-evaluate-case1 | Evaluate conformant case 1 | SDK submission envelope, four bounded finality checks, semantic `get_case` | 13 | One unique operation; no resubmit | 1 | Stop only after finality and semantic readback |
+| S7-stale-negative | Submit one stale-revision negative control | SDK submission envelope, four bounded finality checks, unchanged-state `get_case` | 13 | Require finalized `FINISHED_WITH_ERROR` plus `USER_ERROR STALE_REVISION`; no resubmit | 1 | Stop if error classification or unchanged-state proof is absent |
+| S8-create-case2 | Create the exact unknown fixture | SDK submission envelope, four bounded finality checks, `get_id_by_nonce`, `get_case` | 14 | One unique nonce; no resubmit | 1 | Stop when terminal receipt and both readbacks agree |
+| S9-freeze-case2 | Freeze case 2 | SDK submission envelope, four bounded finality checks, semantic `get_case` | 13 | One unique operation; no resubmit | 1 | Stop on final success/error or reconciliation-required |
+| S10-evaluate-case2 | Evaluate unknown case 2 | SDK submission envelope, four bounded finality checks, semantic `get_case` | 13 | One unique operation; no resubmit | 1 | Stop only after finality and `UNKNOWN` readback |
+| S11-retry-case2 | Read cooldown, wait once, and retry case 2 | One `get_case`, bounded cooldown wait, SDK submission envelope, four bounded finality checks, semantic `get_case` | 15 | `last_accepted_at` must be numeric and the wait must be ≤120s; no second retry | 1 | Stop before writing on invalid/excessive cooldown; otherwise stop after finality/readback |
+| S12-reconciliation | Reconcile the retained evaluate hash | One receipt lookup, `get_case`, `get_count`, `get_version` | 4 | One explicit read-only pass; no parallel reconciliation | 0 | Stop after all three authoritative readbacks |
 
-Studio evidence must report actual requests separately from transactions. The planned maxima above are hard stops for the normal journey; every transient retry attempt is included in the actual count and may cause the operation to stop earlier rather than exceed the declared cap.
+The SDK submission envelope is included in each write cap: nonce lookup, gas estimate, gas-price lookup, one raw submission, and its transport receipt check. The one-shot guard disables ABI-mismatch fallback and the transport fuse blocks any second `eth_sendTransaction`/`eth_sendRawTransaction`. Every request is recorded in the global `rpcRequests` list and in exactly one operation; `requestSequence` must equal the sum of all operation counts. Actual requests and transactions are reported separately.
 
 ## STUDIO RPC BUDGET EVIDENCE
 
 ### Measured disposable-run instrument
 
-The frozen UI run could not be repaired because its request ledger was never retained. A fresh disposable run is therefore instrumented before any new deployment by [probes/studio_rpc_run.mjs](../probes/studio_rpc_run.mjs). It verifies the exact reviewed source commit/hash, creates one ephemeral account, counts every JSON-RPC method through the installed GenLayerJS transport, records HTTP status, duration, `Retry-After`, terminal result, transaction hash, and readback boundary, and writes a machine-readable evidence file under `docs/evidence/`. It stops on a request-budget overflow, rate limit, finality timeout, or semantic/readback mismatch; it never resubmits a write.
+The frozen UI run could not be repaired because its request ledger was never retained. A fresh disposable run is therefore instrumented before any new deployment by [probes/studio_rpc_run.mjs](../probes/studio_rpc_run.mjs). It verifies the exact reviewed source commit/hash and exact endpoint, creates one ephemeral account, counts every JSON-RPC method through the installed GenLayerJS transport, records HTTP status, duration, `Retry-After`, terminal result, transaction hash, submission hash, and readback boundary, and writes a machine-readable evidence file under `docs/evidence/`. It stops on a row-cap overflow, rate limit, bounded request/operation deadline, malformed cooldown, finality timeout, or semantic/readback mismatch; it never resubmits a write.
 
-The runner's explicit S0–S12 sequence is: disposable funding, chain/account preflight, source schema, one deployment, case-1 create/replace/freeze/evaluate, stale negative, case-2 create/freeze/evaluate, one cooldown-respecting retry, and retained-hash reconciliation. The unknown fixture is the exact prior case-2 fixture: the requirement intentionally asks about an external policy absent from the input and ABI, so the expected result is `UNKNOWN`. The command is:
+The runner's explicit S0–S12 sequence is: disposable funding, chain/account preflight, source schema, one deployment, case-1 create/replace/freeze/evaluate, stale negative, case-2 create/freeze/evaluate, one cooldown-respecting retry, and retained-hash reconciliation. The unknown fixture is the exact prior case-2 fixture: the requirement intentionally asks about an external policy absent from the input and ABI, so the expected result is `UNKNOWN`. S11 owns both the cooldown read and wait; S12 owns one receipt plus three readbacks. The command is:
 
 ```text
 STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node probes/studio_rpc_run.mjs
@@ -44,7 +50,9 @@ STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node p
 
 This runner is preparation only until a fresh exact-revision PRE_DEPLOY gate authorizes the disposable deployment. The historical rows below remain unchanged and still do not claim measurements from the frozen UI run.
 
-### Live status
+The endpoint is pinned to `https://studio.genlayer.com/api`; any `STUDIO_RPC_ENDPOINT` override that differs from that exact value produces secret-free BLOCKED evidence with zero RPC requests. The instrument also emits one global `rpcRequests` list, operation-local events, row caps, request/operation deadlines, and immediately retained submission hashes. No new Studio deployment has been authorized or run by this remediation yet.
+
+### Historical frozen UI status (not the new measured run)
 
 The Studio run produced exactly one deployment and nine unique contract calls, all with retained hashes and Explorer lifecycle confirmation. The transaction count is therefore measured exactly. The Studio UI did not preserve a structured per-operation request ledger that could be exported after the run; the raw UI captures expose automatic sim_fundAccount session/account rows and a later 30 requests per minute rate-limit message, but not a complete historic request count for each receipt, poll, or readback. Those automatic funding rows were not user-triggered actions. Replaying the run to manufacture a count is forbidden by the one-deploy and unique-write rule.
 

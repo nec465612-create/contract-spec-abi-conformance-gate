@@ -8,28 +8,42 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCE_PATH = resolve(ROOT, 'contracts/main.py')
-const ENDPOINT = process.env.STUDIO_RPC_ENDPOINT || 'https://studio.genlayer.com/api'
+const EXACT_STUDIO_RPC_ENDPOINT = 'https://studio.genlayer.com/api'
+const requestedEndpoint = process.env.STUDIO_RPC_ENDPOINT
+const ENDPOINT = EXACT_STUDIO_RPC_ENDPOINT
 const EXPECTED_SOURCE_COMMIT = 'de66367b459ed421b73bdfb7f3d04bf15088ed38'
 const EXPECTED_SOURCE_SHA256 = 'AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45'
 const RUN_CONFIRM = 'CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN'
 const STATUS_SCHEDULE_SECONDS = [10, 20, 40, 80]
 const MAX_STATUS_CHECKS = STATUS_SCHEDULE_SECONDS.length
-const MAX_OPERATION_REQUESTS = 16
+const REQUEST_TIMEOUT_MS = 30_000
+const OPERATION_TIMEOUT_MS = 240_000
+const MAX_COOLDOWN_WAIT_MS = 120_000
+const OPERATION_REQUEST_CAPS = Object.freeze({
+  'S0-funding': 1,
+  'S0-preflight': 2,
+  'S1-schema': 1,
+  'S2-deploy': 13,
+  'S3-create-case1': 14,
+  'S4-replace-case1': 14,
+  'S5-freeze-case1': 14,
+  'S6-evaluate-case1': 13,
+  'S7-stale-negative': 13,
+  'S8-create-case2': 14,
+  'S9-freeze-case2': 13,
+  'S10-evaluate-case2': 13,
+  'S11-retry-case2': 15,
+  'S12-reconciliation': 4,
+})
 
-if (process.env.STUDIO_RUN_CONFIRM !== RUN_CONFIRM) {
-  throw new Error(`Set STUDIO_RUN_CONFIRM=${RUN_CONFIRM} to authorize this disposable measured run.`)
-}
-
-const source = await readFile(SOURCE_PATH, 'utf8')
-const sourceSha256 = createHash('sha256').update(source).digest('hex').toUpperCase()
-if (sourceSha256 !== EXPECTED_SOURCE_SHA256) {
-  throw new Error(`Source hash mismatch: ${sourceSha256}`)
-}
-const sourceAtReviewedCommit = execFileSync('git', ['show', `${EXPECTED_SOURCE_COMMIT}:contracts/main.py`], { cwd: ROOT, encoding: 'utf8' })
-const reviewedSha256 = createHash('sha256').update(sourceAtReviewedCommit).digest('hex').toUpperCase()
-if (reviewedSha256 !== EXPECTED_SOURCE_SHA256) {
-  throw new Error(`Reviewed source hash mismatch: ${reviewedSha256}`)
-}
+const operations = []
+const allEvents = []
+let currentOperation = null
+let requestSequence = 0
+let contractAddress = null
+const txs = []
+let source = null
+let sourceSha256 = null
 
 const base1 = {
   requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
@@ -48,9 +62,6 @@ const unknownBase = {
   abi: [{ type: 'function', name: 'check_v2', inputs: [], outputs: [], stateMutability: 'view' }],
 }
 
-const operations = []
-let currentOperation = null
-let requestSequence = 0
 const originalFetch = globalThis.fetch
 
 function jsonSafe(value) {
@@ -79,23 +90,104 @@ function retryAfter(responseText, response) {
   }
 }
 
+async function writeEvidenceFile(evidence) {
+  const outputPath = resolve(ROOT, 'docs', 'evidence', `studio-rpc-run-${Date.now()}.json`)
+  await mkdir(dirname(outputPath), { recursive: true })
+  await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8')
+  return outputPath
+}
+
+function blockedEvidence(error, accountAddress = null) {
+  return {
+    status: 'BLOCKED',
+    exactSourceCommit: EXPECTED_SOURCE_COMMIT,
+    sourceSha256,
+    expectedSourceSha256: EXPECTED_SOURCE_SHA256,
+    chainId: 61999,
+    endpoint: ENDPOINT,
+    account: accountAddress,
+    contractAddress,
+    transactionCount: txs.length,
+    transactions: txs,
+    operations,
+    rpcRequests: allEvents,
+    requestSequence,
+    error: { message: String(error), code: error?.code ?? null },
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+let preflightError = null
+try {
+  if (process.env.STUDIO_RUN_CONFIRM !== RUN_CONFIRM) {
+    throw new Error(`Set STUDIO_RUN_CONFIRM=${RUN_CONFIRM} to authorize this disposable measured run.`)
+  }
+  if (requestedEndpoint && requestedEndpoint !== EXACT_STUDIO_RPC_ENDPOINT) {
+    throw new Error(`STUDIO_RPC_ENDPOINT must equal ${EXACT_STUDIO_RPC_ENDPOINT}; refusing redirected RPC.`)
+  }
+  source = await readFile(SOURCE_PATH, 'utf8')
+  sourceSha256 = createHash('sha256').update(source).digest('hex').toUpperCase()
+  if (sourceSha256 !== EXPECTED_SOURCE_SHA256) {
+    throw new Error(`Source hash mismatch: ${sourceSha256}`)
+  }
+  const sourceAtReviewedCommit = execFileSync('git', ['show', `${EXPECTED_SOURCE_COMMIT}:contracts/main.py`], { cwd: ROOT, encoding: 'utf8' })
+  const reviewedSha256 = createHash('sha256').update(sourceAtReviewedCommit).digest('hex').toUpperCase()
+  if (reviewedSha256 !== EXPECTED_SOURCE_SHA256) {
+    throw new Error(`Reviewed source hash mismatch: ${reviewedSha256}`)
+  }
+} catch (error) {
+  preflightError = error
+}
+
+if (preflightError) {
+  const evidence = blockedEvidence(preflightError)
+  const outputPath = await writeEvidenceFile(evidence)
+  console.error(JSON.stringify({ status: evidence.status, outputPath, transactionCount: evidence.transactionCount, requests: requestSequence, error: evidence.error }, null, 2))
+  process.exit(1)
+}
+
+function isSubmissionMethod(method) {
+  return method === 'eth_sendTransaction' || method === 'eth_sendRawTransaction'
+}
+
 globalThis.fetch = async (url, init) => {
   const requestStarted = Date.now()
-  const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+  let body = {}
+  try {
+    body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+  } catch {
+    body = {}
+  }
+  if (!currentOperation) throw new Error('RPC request attempted outside a measured operation.')
+  if (Date.now() >= currentOperation.deadlineAt) throw new Error(`RPC operation deadline exceeded before ${body.method ?? 'unknown'}`)
+  if (currentOperation.events.length >= currentOperation.maxRequests) {
+    throw new Error(`RPC operation budget exhausted before ${body.method ?? 'unknown'}`)
+  }
+  if (isSubmissionMethod(body.method) && currentOperation.submissionAttempted) {
+    throw new Error(`One-shot submission guard blocked duplicate ${body.method}`)
+  }
+  if (isSubmissionMethod(body.method)) currentOperation.submissionAttempted = true
   const event = {
     sequence: ++requestSequence,
     at: new Date(requestStarted).toISOString(),
-    operation: currentOperation?.id ?? 'unscoped',
-    trigger: currentOperation?.trigger ?? 'unscoped',
+    operation: currentOperation.id,
+    trigger: currentOperation.trigger,
     method: body.method ?? 'unknown',
     paramsShape: shape(body.params ?? []),
   }
-  currentOperation?.events.push(event)
-  if (currentOperation && currentOperation.events.length > MAX_OPERATION_REQUESTS) {
-    throw new Error(`RPC operation budget exhausted before ${event.method}`)
+  allEvents.push(event)
+  currentOperation.events.push(event)
+  const controller = new AbortController()
+  const parentSignal = init?.signal
+  const abortFromParent = () => controller.abort(parentSignal.reason)
+  if (parentSignal) {
+    if (parentSignal.aborted) abortFromParent()
+    else parentSignal.addEventListener('abort', abortFromParent, { once: true })
   }
+  const timeoutMs = Math.min(REQUEST_TIMEOUT_MS, Math.max(1, currentOperation.deadlineAt - Date.now()))
+  const timeoutId = setTimeout(() => controller.abort(new Error(`RPC request timeout after ${timeoutMs}ms`)), timeoutMs)
   try {
-    const response = await originalFetch(url, init)
+    const response = await originalFetch(url, { ...init, signal: controller.signal })
     const responseText = await response.clone().text()
     event.status = response.status
     event.durationMs = Date.now() - requestStarted
@@ -116,15 +208,66 @@ globalThis.fetch = async (url, init) => {
     event.durationMs = Date.now() - requestStarted
     event.error = { message: String(error) }
     throw error
+  } finally {
+    clearTimeout(timeoutId)
+    parentSignal?.removeEventListener('abort', abortFromParent)
   }
 }
 
 function startOperation(id, trigger) {
   if (currentOperation) throw new Error(`Nested operation: ${currentOperation.id}`)
-  const operation = { id, trigger, startedAt: new Date().toISOString(), events: [], status: 'RUNNING' }
+  const maxRequests = OPERATION_REQUEST_CAPS[id]
+  if (!maxRequests) throw new Error(`Missing RPC cap for ${id}`)
+  const startedAtMs = Date.now()
+  const operation = {
+    id,
+    trigger,
+    startedAt: new Date(startedAtMs).toISOString(),
+    startedAtMs,
+    deadlineAt: startedAtMs + OPERATION_TIMEOUT_MS,
+    maxRequests,
+    events: [],
+    submissionAttempted: false,
+    status: 'RUNNING',
+  }
   operations.push(operation)
   currentOperation = operation
   return operation
+}
+
+function retainSubmittedHash(operationId, hash) {
+  if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) return null
+  let row = txs.find((item) => item.id === operationId)
+  if (!row) {
+    row = { id: operationId, hash, hashSource: 'rpc-submission', submissionHashes: [] }
+    txs.push(row)
+  }
+  row.submissionHashes ??= []
+  if (!row.submissionHashes.includes(hash)) row.submissionHashes.push(hash)
+  if (!row.hash) {
+    row.hash = hash
+    row.hashSource = 'rpc-submission'
+  }
+  return row
+}
+
+function retainTransaction(operationId, hash) {
+  if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(`Invalid transaction hash for ${operationId}: ${hash}`)
+  let row = txs.find((item) => item.id === operationId)
+  if (!row) {
+    row = { id: operationId, hash, genlayerHash: hash, hashSource: 'genlayer', submissionHashes: [] }
+    txs.push(row)
+  } else {
+    row.genlayerHash = hash
+    row.hashSource = row.hash === hash ? 'genlayer' : 'rpc-submission+genlayer'
+  }
+  return row
+}
+
+function captureSubmittedHashes(operation) {
+  for (const event of operation.events) {
+    if (isSubmissionMethod(event.method)) retainSubmittedHash(operation.id, event.result)
+  }
 }
 
 async function finishOperation(operation, fn) {
@@ -137,8 +280,12 @@ async function finishOperation(operation, fn) {
     operation.error = { message: String(error), code: error?.code ?? null }
     throw error
   } finally {
+    captureSubmittedHashes(operation)
     operation.requestCount = operation.events.length
     operation.methods = Object.fromEntries([...new Set(operation.events.map((event) => event.method))].map((method) => [method, operation.events.filter((event) => event.method === method).length]))
+    operation.submissionCount = operation.events.filter((event) => isSubmissionMethod(event.method)).length
+    operation.budgetWithinCap = operation.requestCount <= operation.maxRequests
+    operation.allEventsRetained = operation.events.every((event) => event.operation === operation.id)
     operation.endedAt = new Date().toISOString()
     currentOperation = null
   }
@@ -157,16 +304,30 @@ function isExecutionSuccess(transaction) {
   return transaction?.txExecutionResultName === 'FINISHED_WITH_RETURN' || transaction?.txExecutionResult === 1
 }
 
-function wait(milliseconds) {
+function isExecutionError(transaction) {
+  return transaction?.txExecutionResultName === 'FINISHED_WITH_ERROR' || transaction?.txExecutionResult === 2
+}
+
+function hasExpectedStaleError(transaction) {
+  const serialized = JSON.stringify(jsonSafe(transaction)).toUpperCase()
+  return serialized.includes('USER_ERROR') && serialized.includes('STALE_REVISION')
+}
+
+function waitBounded(milliseconds) {
+  if (milliseconds <= 0) return Promise.resolve()
+  if (!currentOperation) throw new Error('Bounded wait attempted outside a measured operation.')
+  const remaining = currentOperation.deadlineAt - Date.now()
+  if (milliseconds > remaining) throw new Error(`Operation ${currentOperation.id} deadline would be exceeded by ${milliseconds}ms wait`)
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds))
 }
 
 async function waitForFinalized(client, operationId, hash) {
+  assert(currentOperation?.id === operationId, `Finality poll escaped ${operationId}`)
   const started = Date.now()
   let last = null
   for (const seconds of STATUS_SCHEDULE_SECONDS) {
     const delay = seconds * 1000 - (Date.now() - started)
-    if (delay > 0) await wait(delay)
+    if (delay > 0) await waitBounded(delay)
     last = await client.getTransaction({ hash })
     if (isFinalized(last)) return last
   }
@@ -186,12 +347,48 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+function isAbiMismatchError(error) {
+  const text = (() => {
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return String(error)
+    }
+  })().toLowerCase()
+  const message = String(error?.shortMessage ?? '') + ' ' + String(error?.details ?? '') + ' ' + String(error?.message ?? '') + ' ' + text
+  return ['invalid pointer in tuple', 'invalid pointer', 'could not decode', 'invalid arrayify value', 'types/value length mismatch'].some((term) => message.toLowerCase().includes(term))
+}
+
+function installOneShotSubmissionGuard(client) {
+  const request = client.request.bind(client)
+  client.request = async (...args) => {
+    try {
+      return await request(...args)
+    } catch (error) {
+      if (!isAbiMismatchError(error)) throw error
+      const guarded = new Error('STUDIO_RUN_ONE_SHOT_SUBMISSION_ERROR')
+      guarded.code = 'STUDIO_RUN_ONE_SHOT_SUBMISSION_ERROR'
+      throw guarded
+    }
+  }
+}
+
+function cooldownDelay(record) {
+  const raw = record?.last_accepted_at
+  if (!/^\d+$/.test(String(raw))) throw new Error(`Invalid last_accepted_at: ${raw}`)
+  const acceptedAtSeconds = Number(raw)
+  if (!Number.isSafeInteger(acceptedAtSeconds) || acceptedAtSeconds <= 0) throw new Error(`Invalid last_accepted_at: ${raw}`)
+  const targetMs = acceptedAtSeconds * 1000 + 60_000 + 2_000
+  const delay = targetMs - Date.now()
+  if (delay > MAX_COOLDOWN_WAIT_MS) throw new Error(`Cooldown exceeds ${MAX_COOLDOWN_WAIT_MS}ms: ${delay}ms`)
+  return Math.max(0, delay)
+}
+
 const account = createAccount()
 const client = createClient({ chain: studionet, endpoint: ENDPOINT, account })
+installOneShotSubmissionGuard(client)
 const nonce1 = 'c0f03716fea36fa4643b82f9bde0faf0'
 const nonce2 = '6c4158ea665e0aa601a5d0189180473e'
-let contractAddress = null
-const txs = []
 
 try {
   await operation('S0-funding', 'fund one disposable account exactly once', async () => {
@@ -213,113 +410,121 @@ try {
 
   const deploy = await operation('S2-deploy', 'submit exact source once and await bounded finality', async () => {
     const hash = await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
+    const txRow = retainTransaction('S2-deploy', hash)
     const transaction = await waitForFinalized(client, 'S2-deploy', hash)
     contractAddress = transaction.recipient ?? transaction.to_address
     assert(typeof contractAddress === 'string' && /^0x[0-9a-fA-F]{40}$/.test(contractAddress), `Missing deployed contract address for ${hash}`)
     const deployedCode = await client.getContractCode(contractAddress)
     const deployedSha256 = createHash('sha256').update(deployedCode).digest('hex').toUpperCase()
     assert(deployedSha256 === EXPECTED_SOURCE_SHA256, `Deployed source hash mismatch: ${deployedSha256}`)
-    txs.push({ id: 'S2-deploy', hash, address: contractAddress, transaction: jsonSafe(transaction), deployedSha256 })
+    Object.assign(txRow, { address: contractAddress, transaction: jsonSafe(transaction), deployedSha256 })
     return { hash, contractAddress, transaction, deployedSha256 }
   })
 
   const create1 = await operation('S3-create-case1', 'one unique create_case write plus two readbacks', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'create_case', args: [nonce1, JSON.stringify(base1), 0n], value: 0n })
+    const txRow = retainTransaction('S3-create-case1', hash)
     const transaction = await waitForFinalized(client, 'S3-create-case1', hash)
     assert(isExecutionSuccess(transaction), `create_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const id = await readContract(client, contractAddress, 'get_id_by_nonce', [account.address, nonce1])
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     assert(String(id) === '1' && record.revision === '1' && record.phase === 'BASE_DRAFT', 'create_case readback mismatch')
-    txs.push({ id: 'S3-create-case1', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { id, record } }
   })
 
   const replace = await operation('S4-replace-case1', 'one unique replace_base write plus current/history readbacks', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'replace_base', args: [1n, JSON.stringify(base2), 1n], value: 0n })
+    const txRow = retainTransaction('S4-replace-case1', hash)
     const transaction = await waitForFinalized(client, 'S4-replace-case1', hash)
     assert(isExecutionSuccess(transaction), `replace_base failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     const historical = parseCase(await readContract(client, contractAddress, 'get_version', [1n, 1n]))
     assert(current.revision === '2' && historical.revision === '1', 'replace_base history readback mismatch')
-    txs.push({ id: 'S4-replace-case1', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { current, historical } }
   })
 
   const freeze = await operation('S5-freeze-case1', 'one unique freeze_case write plus current/history readbacks', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'freeze_case', args: [1n, 2n], value: 0n })
+    const txRow = retainTransaction('S5-freeze-case1', hash)
     const transaction = await waitForFinalized(client, 'S5-freeze-case1', hash)
     assert(isExecutionSuccess(transaction), `freeze_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     const historical = parseCase(await readContract(client, contractAddress, 'get_version', [1n, 2n]))
     assert(current.revision === '3' && current.phase === 'FROZEN' && historical.revision === '2', 'freeze_case readback mismatch')
-    txs.push({ id: 'S5-freeze-case1', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { current, historical } }
   })
 
   const evaluate = await operation('S6-evaluate-case1', 'one unique evaluate_case write plus semantic readback', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'evaluate_case', args: [1n, 3n], value: 0n })
+    const txRow = retainTransaction('S6-evaluate-case1', hash)
     const transaction = await waitForFinalized(client, 'S6-evaluate-case1', hash)
     assert(isExecutionSuccess(transaction), `evaluate_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     assert(current.revision === '4' && current.phase === 'DONE' && current.outcome === 'CONFORMANT' && current.result?.labels?.[0] === 'IMPLEMENTS', 'evaluate_case semantic readback mismatch')
-    txs.push({ id: 'S6-evaluate-case1', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: current }
   })
 
   const stale = await operation('S7-stale-negative', 'one unique stale negative write plus unchanged-state readback', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'replace_base', args: [1n, JSON.stringify(base2), 3n], value: 0n })
+    const txRow = retainTransaction('S7-stale-negative', hash)
     const transaction = await waitForFinalized(client, 'S7-stale-negative', hash)
-    assert(!isExecutionSuccess(transaction), 'stale negative unexpectedly succeeded')
+    assert(isFinalized(transaction) && isExecutionError(transaction) && hasExpectedStaleError(transaction), `stale negative did not finalize as USER_ERROR STALE_REVISION: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     assert(current.revision === '4', 'stale negative changed current state')
-    txs.push({ id: 'S7-stale-negative', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction), expectedError: 'USER_ERROR STALE_REVISION' })
     return { hash, transaction, readback: current }
   })
 
   const create2 = await operation('S8-create-case2', 'one unique unknown-fixture create_case write plus two readbacks', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'create_case', args: [nonce2, JSON.stringify(unknownBase), 0n], value: 0n })
+    const txRow = retainTransaction('S8-create-case2', hash)
     const transaction = await waitForFinalized(client, 'S8-create-case2', hash)
     assert(isExecutionSuccess(transaction), `case2 create failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const id = await readContract(client, contractAddress, 'get_id_by_nonce', [account.address, nonce2])
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(String(id) === '2' && record.revision === '1' && record.phase === 'BASE_DRAFT', 'case2 create readback mismatch')
-    txs.push({ id: 'S8-create-case2', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { id, record } }
   })
 
   const freeze2 = await operation('S9-freeze-case2', 'one unique freeze_case write plus semantic phase readback', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'freeze_case', args: [2n, 1n], value: 0n })
+    const txRow = retainTransaction('S9-freeze-case2', hash)
     const transaction = await waitForFinalized(client, 'S9-freeze-case2', hash)
     assert(isExecutionSuccess(transaction), `case2 freeze failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(record.revision === '2' && record.phase === 'FROZEN', 'case2 freeze readback mismatch')
-    txs.push({ id: 'S9-freeze-case2', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: record }
   })
 
   const evaluate2 = await operation('S10-evaluate-case2', 'one unique unknown evaluate_case write plus semantic readback', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'evaluate_case', args: [2n, 2n], value: 0n })
+    const txRow = retainTransaction('S10-evaluate-case2', hash)
     const transaction = await waitForFinalized(client, 'S10-evaluate-case2', hash)
     assert(isExecutionSuccess(transaction), `case2 evaluate failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(record.revision === '3' && record.phase === 'UNRESOLVED' && record.outcome === 'UNRESOLVED' && record.result?.labels?.[0] === 'UNKNOWN', 'case2 unknown readback mismatch')
-    txs.push({ id: 'S10-evaluate-case2', hash, transaction: jsonSafe(transaction) })
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: record }
   })
 
-  const case2Record = await readContract(client, contractAddress, 'get_case', [2n])
-  const acceptedAt = Number(parseCase(case2Record).last_accepted_at) * 1000
-  const cooldownMs = Math.max(0, acceptedAt + 60_000 + 2_000 - Date.now())
-  await wait(cooldownMs)
-
-  const retry = await operation('S11-retry-case2', `one retry after ${Math.ceil(cooldownMs / 1000)}s cooldown plus semantic readback`, async () => {
+  const retry = await operation('S11-retry-case2', 'one cooldown read, bounded wait, retry write, and semantic readback', async () => {
+    const case2Record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
+    const cooldownMs = cooldownDelay(parseCase(case2Record))
+    await waitBounded(cooldownMs)
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'retry_case', args: [2n, 3n], value: 0n })
+    const txRow = retainTransaction('S11-retry-case2', hash)
     const transaction = await waitForFinalized(client, 'S11-retry-case2', hash)
     assert(isExecutionSuccess(transaction), `case2 retry failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(record.revision === '4' && record.phase === 'UNRESOLVED' && record.outcome === 'UNRESOLVED' && record.accepted_attempts === 2 && record.result?.labels?.[0] === 'UNKNOWN', 'case2 retry readback mismatch')
-    txs.push({ id: 'S11-retry-case2', hash, transaction: jsonSafe(transaction) })
-    return { hash, transaction, readback: record }
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
+    return { hash, cooldownMs, transaction, readback: record }
   })
 
   const reconciliation = await operation('S12-reconciliation', 'one explicit retained-hash receipt lookup and three authoritative readbacks', async () => {
@@ -331,6 +536,11 @@ try {
     return { receipt, readback: { current, count, historical } }
   })
 
+  assert(allEvents.length === requestSequence, `RPC event sequence mismatch: ${allEvents.length} != ${requestSequence}`)
+  assert(allEvents.every((event) => event.operation && event.operation !== 'unscoped'), 'Unscoped RPC event present')
+  assert(operations.every((item) => item.requestCount <= item.maxRequests && item.budgetWithinCap && item.allEventsRetained), 'Operation RPC cap/evidence invariant failed')
+  assert(operations.reduce((sum, item) => sum + item.requestCount, 0) === requestSequence, 'Operation count does not equal global request sequence')
+  assert(txs.length === 10 && txs.every((item) => /^0x[0-9a-fA-F]{64}$/.test(item.hash)), `Expected 10 retained transaction hashes, got ${txs.length}`)
   const evidence = {
     status: 'PASS',
     exactSourceCommit: EXPECTED_SOURCE_COMMIT,
@@ -342,31 +552,24 @@ try {
     transactionCount: txs.length,
     transactions: txs,
     operations,
+    rpcRequests: allEvents,
+    requestSequence,
+    operationRequestCaps: OPERATION_REQUEST_CAPS,
+    requestTimeoutMs: REQUEST_TIMEOUT_MS,
+    operationTimeoutMs: OPERATION_TIMEOUT_MS,
+    maxCooldownWaitMs: MAX_COOLDOWN_WAIT_MS,
     reconciliation,
     generatedAt: new Date().toISOString(),
   }
-  const outputPath = resolve(ROOT, 'docs', 'evidence', `studio-rpc-run-${Date.now()}.json`)
-  await mkdir(dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8')
+  const outputPath = await writeEvidenceFile(evidence)
   console.log(JSON.stringify({ status: evidence.status, outputPath, contractAddress, account: account.address, transactionCount: txs.length, requests: operations.reduce((sum, item) => sum + item.requestCount, 0) }, null, 2))
 } catch (error) {
-  const evidence = {
-    status: 'BLOCKED',
-    exactSourceCommit: EXPECTED_SOURCE_COMMIT,
-    sourceSha256: EXPECTED_SOURCE_SHA256,
-    chainId: 61999,
-    endpoint: ENDPOINT,
-    account: account.address,
-    contractAddress,
-    transactionCount: txs.length,
-    transactions: txs,
-    operations,
-    error: { message: String(error), code: error?.code ?? null },
-    generatedAt: new Date().toISOString(),
-  }
-  const outputPath = resolve(ROOT, 'docs', 'evidence', `studio-rpc-run-${Date.now()}.json`)
-  await mkdir(dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8')
+  const evidence = blockedEvidence(error, account.address)
+  evidence.operationRequestCaps = OPERATION_REQUEST_CAPS
+  evidence.requestTimeoutMs = REQUEST_TIMEOUT_MS
+  evidence.operationTimeoutMs = OPERATION_TIMEOUT_MS
+  evidence.maxCooldownWaitMs = MAX_COOLDOWN_WAIT_MS
+  const outputPath = await writeEvidenceFile(evidence)
   console.error(JSON.stringify({ status: evidence.status, outputPath, contractAddress, account: account.address, transactionCount: txs.length, error: evidence.error }, null, 2))
   process.exitCode = 1
 }
