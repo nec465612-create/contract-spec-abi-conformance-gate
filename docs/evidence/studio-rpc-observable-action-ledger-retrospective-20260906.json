@@ -1,0 +1,61 @@
+{
+  "status": "RETROSPECTIVE_LEGACY_LEDGER",
+  "kind": "STUDIO_RPC_MEASUREMENT_MODE_LOCK",
+  "preparedAt": "2026-09-06T00:09:59.0306655+07:00",
+  "preparedAtRepositoryHead": "12a02677ab1522a1f9b00622da5e483d2b0c9c6c",
+  "measurementMode": "OBSERVABLE_ACTION_LEDGER",
+  "measurementTiming": "RETROSPECTIVE_LEGACY",
+  "capabilityProbeStatus": "NOT_APPLICABLE_RETROSPECTIVE_LEGACY",
+  "capabilityProbe": {
+    "toolOrApi": "Existing Studio UI/Explorer evidence plus probes/studio_rpc_run.mjs global fetch instrumentation for the retained disposable run",
+    "check": "Retrospective inspection of retained Studio actions, transaction objects, status checks, terminal receipts and authoritative reads; no pre-action probe was possible without rewriting history",
+    "result": "The legacy UI run has no complete physical request counter. The later instrumented disposable run has a complete observable action/request ledger through its bounded S6 stop.",
+    "physicalNetworkRequestsObservable": false
+  },
+  "physicalNetworkRequestCount": null,
+  "physicalNetworkCountClaim": "NONE",
+  "replayForMeasurement": "NO",
+  "sourceBinding": {
+    "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
+    "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
+    "chainId": 61999,
+    "endpoint": "https://studio.genlayer.com/api"
+  },
+  "observableLedger": {
+    "evidenceFile": "studio-rpc-run-1788610697042.json",
+    "startedAt": "2026-09-05T12:13:53.221Z",
+    "stoppedAt": "2026-09-05T12:18:17.041Z",
+    "contractAddress": "0x976E9e852C00FAbB4137DeaC50e475DE01B3A1F1",
+    "account": "0x345904aCc1DA18b8a8Af77D4Ae16E99e3f73bFe3",
+    "requestSequence": 52,
+    "transactionCount": 5,
+    "operations": [
+      {"id":"S0-funding","requestCount":1,"status":"PASS","transactionHash":null,"terminal":"funding result retained"},
+      {"id":"S0-preflight","requestCount":2,"status":"PASS","transactionHash":null,"terminal":"chain and balance checks passed"},
+      {"id":"S1-schema","requestCount":1,"status":"PASS","transactionHash":null,"terminal":"source schema passed"},
+      {"id":"S2-deploy","requestCount":9,"status":"PASS","transactionHash":"0xef232017709f5b3109e3c3d7525077628b96f3397a55247b4481e5da7b9e1495","terminal":"FINALIZED, MAJORITY_AGREE, deployed-source readback passed"},
+      {"id":"S3-create-case1","requestCount":10,"status":"PASS","transactionHash":"0x78452b8c44b09470ac696b538d3c571704bb04e50dc5daf1c4744126b30f9f4a","terminal":"FINALIZED, MAJORITY_AGREE, case readbacks passed"},
+      {"id":"S4-replace-case1","requestCount":10,"status":"PASS","transactionHash":"0x33caa1fa1796326b21185da91de01a9c543b79928a2cd8291b7a8ea20dea0f97","terminal":"FINALIZED, MAJORITY_AGREE, case/history readbacks passed"},
+      {"id":"S5-freeze-case1","requestCount":10,"status":"PASS","transactionHash":"0x32afeea9936d3435f7b7615bfa9e312dff7eb2e9c15aa89544893d7b3a06e533","terminal":"FINALIZED, MAJORITY_AGREE, case/history readbacks passed"},
+      {"id":"S6-evaluate-case1","requestCount":9,"status":"ERROR","transactionHash":"0x64c5797c62daf1ecf76c3b53d4a604ada4b52464920ccfaac125955fe80a5fca","terminal":"bounded status checks did not reach FINALIZED; later sparse read confirmed FINALIZED/TIMEOUT and unchanged state"}
+    ],
+    "statusPollScheduleSeconds": [10,20,40,80],
+    "duplicateTransactions": 0,
+    "automaticWriteRetry": false,
+    "followUpReadEvidence": "studio-rpc-sparse-read-1788610828786.json"
+  },
+  "historicalFrozenUiRun": {
+    "evidenceScope": "docs/VERIFICATION.md historical frozen UI ledger",
+    "physicalRequestCount": null,
+    "physicalCountClaim": "NONE",
+    "transactionHashesAndReadbacksRetained": true,
+    "requestLevelTelemetry": "NOT_RECONSTRUCTABLE",
+    "replayedForMeasurement": false
+  },
+  "platformHealth": {
+    "latestRetainedWindow": "studio-platform-health-recovery-window-1788617987.json",
+    "readinessPredicatePassed": false,
+    "remainingCondition": "stuck_finalization_count=1, no_progress_check_error=true, no_progress_scan_suppressed=true"
+  },
+  "usedForReleaseAuthorization": false
+}

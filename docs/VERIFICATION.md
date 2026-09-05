@@ -1,6 +1,6 @@
 # Live verification
 
-Status: POST_DEPLOY_TEST CHANGES REQUIRED. The historical frozen Studio UI ledger remains non-reconstructable and is not treated as a PASS. The latest instrumented replacement finalized deployment/create/replace/freeze, then finalized `evaluate_case` as `TIMEOUT`; the authoritative state remains unchanged and Vercel browser E2E has not started.
+Status: POST_DEPLOY_TEST CHANGES REQUIRED. The historical frozen Studio UI request count remains non-reconstructable and is not claimed. Under the retrospective legacy `OBSERVABLE_ACTION_LEDGER` mode, transaction hashes, bounded status actions, terminal evidence and authoritative readbacks are preserved without inventing physical telemetry. The latest instrumented replacement finalized deployment/create/replace/freeze, then finalized `evaluate_case` as `TIMEOUT`; the authoritative state remains unchanged and Vercel browser E2E has not started.
 
 Evidence date: 2026-09-05 (Asia/Saigon)
 
@@ -35,6 +35,8 @@ The timestamped read-only Studio platform health response is preserved in [studi
 Three further read-only health samples over the next check intervals are preserved in [studio-platform-health-window-1788613802.json](evidence/studio-platform-health-window-1788613802.json). All remained `DEGRADED` with the same recovery exhaustion, stuck finalization, and failed/suppressed progress checks; the readiness predicate therefore remains false.
 
 The later recovery window is preserved in [studio-platform-health-recovery-window-1788617987.json](evidence/studio-platform-health-recovery-window-1788617987.json). Two read-only samples returned top-level and consensus `HEALTHY`, with no exhausted recovery and no orphaned transactions; however, `stuck_finalization_count=1` and the progress-check flags remain, so this is partial recovery evidence and not replacement authorization.
+
+The measurement-mode lock is preserved in [studio-rpc-observable-action-ledger-retrospective-20260906.json](evidence/studio-rpc-observable-action-ledger-retrospective-20260906.json). The physical request count is explicitly `NONE`; the retained instrumented disposable run records 52 observable requests across S0–S6, five submitted hashes, bounded status checks, terminal/readback evidence and zero duplicate transactions. The older frozen UI run remains a retrospective observable-action record with an unreconstructable physical count. This corrects the measurement classification only; it does not convert the S6 `TIMEOUT` or platform-health predicate into PASS.
 
 ## Historical frozen UI binding (not current measured run)
 

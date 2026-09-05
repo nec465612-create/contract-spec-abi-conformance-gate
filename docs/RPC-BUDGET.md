@@ -1,8 +1,37 @@
 # RPC budget matrix
 
-Status: POST_DEPLOY_TEST CHANGES REQUIRED. The original frozen Studio run remains historical evidence only; its RPC-STUDIO-001 measurement gap is not being replayed. The latest explicit replacement deployed a new disposable contract and finalized create, replace, and freeze, then finalized `evaluate_case` as `TIMEOUT`; a sparse read confirms case 1 remains at revision `3`, `FROZEN`, with no evaluation mutation. The recovery manifest is `BLOCKED_PARTIAL_CASE_ACCEPTED`; frontend release evidence remains intentionally pending Vercel E2E.
+Status: POST_DEPLOY_TEST CHANGES REQUIRED. The original frozen Studio run remains historical evidence only. Its missing physical request count is classified under the retrospective legacy `OBSERVABLE_ACTION_LEDGER` mode; no physical-count claim is made and no replay is permitted. The latest explicit replacement deployed a new disposable contract and finalized create, replace, and freeze, then finalized `evaluate_case` as `TIMEOUT`; a sparse read confirms case 1 remains at revision `3`, `FROZEN`, with no evaluation mutation. The recovery manifest is `BLOCKED_PARTIAL_CASE_ACCEPTED`; the remaining blockers are the failed S6 outcome and external Studio readiness, not an invented physical-count requirement. Frontend release evidence remains intentionally pending Vercel E2E.
 
 Revision binding: the historical frozen Studio ledger binds to source commit de66367b459ed421b73bdfb7f3d04bf15088ed38, contract source SHA-256 AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45, chain 61999, contract 0x6de11297EaF221eb95A9E34e5A0e418061789250, and account 0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902. The latest recovery state has the same source binding and a finalized disposable deployment at 0x976E9e852C00FAbB4137DeaC50e475DE01B3A1F1 with hash 0xef232017709f5b3109e3c3d7525077628b96f3397a55247b4481e5da7b9e1495. Its manifest is `BLOCKED_PARTIAL_CASE_ACCEPTED`: case 1 create `0x78452b...30f9f4a`, replace `0x33caa1...ea0f97`, and freeze `0x32afee...a06e533` finalized with `MAJORITY_AGREE`; evaluate `0x64c579...80a5fca` finalized with `TIMEOUT` and no state mutation. Sparse finalized readback confirms count `1`, revision `3`, and `FROZEN`; the creator key was not retained, so this deployment is not resumed. Studio and frontend budgets are separate ledgers. A result in one ledger cannot satisfy the other.
+
+## STUDIO RPC MEASUREMENT CAPABILITY PROBE
+
+STUDIO_CAPABILITY_PROBE_STATUS: NOT_APPLICABLE_RETROSPECTIVE_LEGACY
+STUDIO_MEASUREMENT_MODE: OBSERVABLE_ACTION_LEDGER
+STUDIO_MEASUREMENT_TIMING: RETROSPECTIVE_LEGACY
+STUDIO_CAPABILITY_PROBE_AT: NOT_APPLICABLE_RETROSPECTIVE_LEGACY
+STUDIO_FIRST_ACTION_AT: 2026-09-05T12:13:53.221Z
+STUDIO_E2E_STARTED_AT: 2026-09-05T12:13:53.221Z
+STUDIO_CAPABILITY_TOOL_OR_API: retained Studio UI/Explorer evidence plus probes/studio_rpc_run.mjs global fetch instrumentation
+STUDIO_CAPABILITY_CHECK: retrospective inspection of actions, hashes, polls, receipts and readbacks; no pre-action probe or replay
+STUDIO_CAPABILITY_RESULT: physical request telemetry unavailable for the legacy UI; observable ledger complete for the retained instrumented run through S6 stop
+STUDIO_PHYSICAL_COUNT_SOURCE: NOT_APPLICABLE
+STUDIO_PHYSICAL_COUNT_CLAIM: NONE
+STUDIO_REPLAY_FOR_MEASUREMENT: NO
+
+| Field | Locked value |
+|---|---|
+| Probe status | `NOT_APPLICABLE_RETROSPECTIVE_LEGACY` |
+| Measurement mode | `OBSERVABLE_ACTION_LEDGER` |
+| Measurement timing | `RETROSPECTIVE_LEGACY` |
+| Capability source | Existing Studio UI/Explorer evidence plus retained `probes/studio_rpc_run.mjs` global fetch instrumentation |
+| Capability result | The legacy UI has no complete physical request counter; the retained disposable run has a complete observable action/request ledger through its bounded S6 stop |
+| Physical request source | `NOT_APPLICABLE` |
+| Physical request claim | `NONE` |
+| Replay or redeploy for measurement | `NO` |
+| Locked evidence | [studio-rpc-observable-action-ledger-retrospective-20260906.json](evidence/studio-rpc-observable-action-ledger-retrospective-20260906.json) |
+
+The retained Studio actions predate this capability-probe requirement, so this is an honest retrospective lock. It does not claim that the full POST_DEPLOY matrix passed: the observable ledger stops at S6 after a bounded finality failure, and the later sparse read records `FINALIZED/TIMEOUT` with unchanged state. Missing physical counts are not converted to zero or inferred from transaction totals.
 
 ## Shared budget rules
 
@@ -40,7 +69,7 @@ The SDK submission envelope is included in each write cap: nonce lookup, gas est
 
 ### Measured disposable-run instrument
 
-The frozen UI run could not be repaired because its request ledger was never retained. A fresh disposable run is therefore instrumented before any new deployment by [probes/studio_rpc_run.mjs](../probes/studio_rpc_run.mjs). It verifies the exact reviewed source commit/hash and exact endpoint, creates one ephemeral account, counts every JSON-RPC method through the installed GenLayerJS transport, records HTTP status, duration, `Retry-After`, terminal result, transaction hash, submission hash, and readback boundary, and writes a machine-readable evidence file under `docs/evidence/`. It stops on a row-cap overflow, rate limit, bounded request/operation deadline, malformed cooldown, finality timeout, or semantic/readback mismatch; it never resubmits a write.
+The frozen UI run could not be physically reconstructed because its request ledger was never retained. Under the retrospective legacy mode above, this is recorded as an observable-ledger limitation rather than a request-count claim. The later disposable run is instrumented by [probes/studio_rpc_run.mjs](../probes/studio_rpc_run.mjs): it verifies the exact reviewed source commit/hash and exact endpoint, creates one ephemeral account, counts every JSON-RPC method through the installed GenLayerJS transport, records HTTP status, duration, `Retry-After`, terminal result, transaction hash, submission hash, and readback boundary, and writes a machine-readable evidence file under `docs/evidence/`. It stops on a row-cap overflow, rate limit, bounded request/operation deadline, malformed cooldown, finality timeout, or semantic/readback mismatch; it never resubmits a write.
 
 The runner's explicit S0–S12 sequence is: disposable funding, chain/account preflight, source schema, one deployment, case-1 create/replace/freeze/evaluate, stale negative, case-2 create/freeze/evaluate, one cooldown-respecting retry, and retained-hash reconciliation. The unknown fixture is the exact prior case-2 fixture: the requirement intentionally asks about an external policy absent from the input and ABI, so the expected result is `UNKNOWN`. S11 owns both the cooldown read and wait; S12 owns one receipt plus three readbacks. The command is:
 
@@ -88,7 +117,7 @@ The earlier rate-limited replacement attempt remains retained as `studio-rpc-run
 
 The Studio run produced exactly one deployment and nine unique contract calls, all with retained hashes and Explorer lifecycle confirmation. The transaction count is therefore measured exactly. The Studio UI did not preserve a structured per-operation request ledger that could be exported after the run; the raw UI captures expose automatic sim_fundAccount session/account rows and a later 30 requests per minute rate-limit message, but not a complete historic request count for each receipt, poll, or readback. Those automatic funding rows were not user-triggered actions. Replaying the run to manufacture a count is forbidden by the one-deploy and unique-write rule.
 
-This is an explicit measurement limitation, not a PASS. It is carried into the anonymous POST_DEPLOY_TEST package for independent adjudication. No transaction, funding action, Reset Storage action, duplicate deployment, or duplicate write was performed to fill the gap.
+This is an explicit measurement limitation, not a PASS and not a physical-count claim. It is carried into the anonymous POST_DEPLOY_TEST package for independent adjudication under `OBSERVABLE_ACTION_LEDGER`. No transaction, funding action, Reset Storage action, duplicate deployment, or duplicate write was performed to fill the gap.
 
 | Exact live row | Planned maximum | Exact measured transaction count | Exact measured readback surface | Actual Studio RPC request count | Status / variance |
 |---|---:|---:|---|---|---|
