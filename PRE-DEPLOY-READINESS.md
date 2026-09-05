@@ -20,7 +20,7 @@ This classification is a release decision, not a claim that the contract survive
 | Explorer | Pending adapted deployment after PRE_DEPLOY approval |
 | Contract address | Pending adapted deployment after PRE_DEPLOY approval |
 | Deployment transaction | Pending adapted deployment after PRE_DEPLOY approval |
-| Exact source commit | Pending implementation commit |
+| Exact source commit | `cd833b78b43e22661ade6a4dddad3fc4269eb07a` |
 | Exact source SHA-256 | `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F` (`contracts/main.py`) |
 | Constructor arguments | None (`__init__()` only) |
 | Linked contracts | None |

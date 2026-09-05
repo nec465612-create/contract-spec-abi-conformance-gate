@@ -2,7 +2,7 @@
 
 Status: PRE_DEPLOY REBUILD IN PROGRESS. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. Its new S0–S7 Studio matrix is locked below and has not been executed. All prior deployments and request ledgers are historical evidence for superseded source bytes only. Frontend release evidence remains intentionally pending Vercel E2E.
 
-Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`; exact implementation commit will be locked before PRE_DEPLOY review. No address or transaction exists for these bytes. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
+Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`, implementation commit `cd833b78b43e22661ade6a4dddad3fc4269eb07a`. No address or transaction exists for these bytes. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
 
 ## STUDIO RPC MEASUREMENT CAPABILITY PROBE — adapted source
 

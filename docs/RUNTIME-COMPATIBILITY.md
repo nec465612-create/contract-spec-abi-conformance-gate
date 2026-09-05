@@ -4,7 +4,7 @@ Status: `RESOLVED_FOR_PRE_DEPLOY` for the adapted local build toolchain. The ear
 
 Decision date: `2026-09-05`
 
-Adapted source implementation commit: `PENDING_IMPLEMENTATION_COMMIT`
+Adapted source implementation commit: `cd833b78b43e22661ade6a4dddad3fc4269eb07a`
 
 Historical deployed source commit: `de66367b459ed421b73bdfb7f3d04bf15088ed38`
 

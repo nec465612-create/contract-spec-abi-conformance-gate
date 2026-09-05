@@ -8,7 +8,7 @@ Evidence date: 2026-09-06 (Asia/Saigon)
 
 | Field | Value |
 |---|---|
-| Adapted source commit | `PENDING_IMPLEMENTATION_COMMIT` |
+| Adapted source commit | `cd833b78b43e22661ade6a4dddad3fc4269eb07a` |
 | Adapted source SHA-256 | `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F` |
 | Adapted Studio deployment | None |
 | Adapted deployment hash | None |
