@@ -13,8 +13,6 @@ const requestedEndpoint = process.env.STUDIO_RPC_ENDPOINT
 const ENDPOINT = EXACT_STUDIO_RPC_ENDPOINT
 const EXPECTED_SOURCE_COMMIT = 'de66367b459ed421b73bdfb7f3d04bf15088ed38'
 const EXPECTED_SOURCE_SHA256 = 'AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45'
-const EXPECTED_RESUME_DEPLOYMENT_HASH = '0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84'
-const EXPECTED_RESUME_CONTRACT_ADDRESS = '0xd1FADDEfbbCbF737e56a9E23803650c02c3369E2'
 const RESUME_MANIFEST_PATH = resolve(ROOT, 'docs/evidence/studio-rpc-recovery-manifest.json')
 const RUN_CONFIRM = 'CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN'
 const STATUS_SCHEDULE_SECONDS = [10, 20, 40, 80]
@@ -53,6 +51,8 @@ const requestedRestart = process.env.STUDIO_RESTART_PARTIAL_RUN ?? null
 const RESUME_MODE = Boolean(requestedResumeHash || requestedResumeAddress)
 const RESTART_MODE = Boolean(requestedRestart)
 let resumeEvidenceSummary = null
+let approvedResumeHash = null
+let approvedResumeAddress = null
 
 const base1 = {
   requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
@@ -165,35 +165,40 @@ try {
     }
   }
   if (RESUME_MODE || RESTART_MODE) {
-    if (RESUME_MODE) {
-      if (requestedResumeHash.toLowerCase() !== EXPECTED_RESUME_DEPLOYMENT_HASH.toLowerCase()) {
-        throw new Error(`Resume deployment hash is not the approved partial-run hash: ${requestedResumeHash}`)
-      }
-      if (requestedResumeAddress.toLowerCase() !== EXPECTED_RESUME_CONTRACT_ADDRESS.toLowerCase()) {
-        throw new Error(`Resume contract address is not the approved partial-run address: ${requestedResumeAddress}`)
-      }
-    }
     const manifest = JSON.parse(await readFile(RESUME_MANIFEST_PATH, 'utf8'))
+    const manifestDeploymentHash = manifest.deployment?.hash
+    const manifestContractAddress = manifest.deployment?.contractAddress
     if (
       !['BLOCKED_PARTIAL', 'BLOCKED_PARTIAL_CASE_ACCEPTED'].includes(manifest.status) ||
       manifest.sourceCommit !== EXPECTED_SOURCE_COMMIT ||
       manifest.sourceSha256 !== EXPECTED_SOURCE_SHA256 ||
       manifest.chainId !== 61999 ||
       manifest.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
-      manifest.deployment?.hash?.toLowerCase() !== EXPECTED_RESUME_DEPLOYMENT_HASH.toLowerCase() ||
-      manifest.deployment?.contractAddress?.toLowerCase() !== EXPECTED_RESUME_CONTRACT_ADDRESS.toLowerCase() ||
+      !/^0x[0-9a-fA-F]{64}$/.test(manifestDeploymentHash ?? '') ||
+      !/^0x[0-9a-fA-F]{40}$/.test(manifestContractAddress ?? '') ||
       manifest.deployment?.status !== 'FINALIZED' ||
       manifest.deployment?.sourceReadbackSha256 !== EXPECTED_SOURCE_SHA256
     ) {
       throw new Error('Resume manifest does not match the approved finalized deployment.')
     }
-    if (RESUME_MODE && manifest.status !== 'BLOCKED_PARTIAL') {
-      throw new Error('The approved partial deployment already has an accepted owner-bound case write; resume is unavailable. Use the explicit partial-run restart mode.')
+    if (RESUME_MODE && requestedResumeHash.toLowerCase() !== manifestDeploymentHash.toLowerCase()) {
+      throw new Error(`Resume deployment hash does not match the manifest deployment: ${requestedResumeHash}`)
     }
+    if (RESUME_MODE && requestedResumeAddress.toLowerCase() !== manifestContractAddress.toLowerCase()) {
+      throw new Error(`Resume contract address does not match the manifest deployment: ${requestedResumeAddress}`)
+    }
+    if (RESUME_MODE && manifest.status !== 'BLOCKED_PARTIAL') {
+      throw new Error('The manifest deployment already has an accepted owner-bound case write; resume is unavailable.')
+    }
+    if (RESTART_MODE && manifest.status !== 'BLOCKED_PARTIAL_CASE_ACCEPTED') {
+      throw new Error('Partial-run restart is allowed only for an accepted owner-bound partial; use the exact resume pair for BLOCKED_PARTIAL.')
+    }
+    approvedResumeHash = manifestDeploymentHash
+    approvedResumeAddress = manifestContractAddress
     resumeEvidenceSummary = {
       manifest: 'docs/evidence/studio-rpc-recovery-manifest.json',
-      deploymentHash: EXPECTED_RESUME_DEPLOYMENT_HASH,
-      contractAddress: EXPECTED_RESUME_CONTRACT_ADDRESS,
+      deploymentHash: approvedResumeHash,
+      contractAddress: approvedResumeAddress,
       mode: RESTART_MODE ? 'replacement' : 'resume',
       manifestStatus: manifest.status,
       priorRequestSequence: manifest.priorRun?.requestSequence ?? null,
@@ -489,7 +494,7 @@ try {
 
   const deploy = await operation('S2-deploy', RESUME_MODE ? 'revalidate the one approved finalized deployment without resubmitting' : 'submit exact source once and await bounded finality', async () => {
     const hash = RESUME_MODE
-      ? requestedResumeHash
+      ? approvedResumeHash
       : await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
     const txRow = retainTransaction('S2-deploy', hash)
     const transaction = await waitForFinalized(client, 'S2-deploy', hash)
@@ -497,7 +502,7 @@ try {
     assert(isFinalized(transaction), `deployment was not finalized: ${JSON.stringify(jsonSafe(transaction))}`)
     contractAddress = transaction.recipient ?? transaction.to_address
     assert(typeof contractAddress === 'string' && /^0x[0-9a-fA-F]{40}$/.test(contractAddress), `Missing deployed contract address for ${hash}`)
-    if (RESUME_MODE) assert(contractAddress.toLowerCase() === requestedResumeAddress.toLowerCase(), `Resumed deployment address mismatch: ${contractAddress}`)
+    if (RESUME_MODE) assert(contractAddress.toLowerCase() === approvedResumeAddress.toLowerCase(), `Resumed deployment address mismatch: ${contractAddress}`)
     const deployedCode = await client.getContractCode(contractAddress)
     const deployedSha256 = createHash('sha256').update(deployedCode).digest('hex').toUpperCase()
     assert(deployedSha256 === EXPECTED_SOURCE_SHA256, `Deployed source hash mismatch: ${deployedSha256}`)
