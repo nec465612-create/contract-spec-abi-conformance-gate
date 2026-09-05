@@ -65,6 +65,22 @@ h2 { margin-bottom: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.04e
 .banner-action { margin-left: auto; padding: 7px 11px; border: 1px solid rgba(139, 212, 198, 0.34); border-radius: 7px; color: var(--accent); background: rgba(139, 212, 198, 0.1); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .banner-action:hover:not(:disabled) { background: rgba(139, 212, 198, 0.18); }
 .pending-note { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.transaction-progress { display: grid; gap: 10px; margin: 0 0 16px; padding: 16px 18px; border: 1px solid rgba(139, 212, 198, 0.28); border-radius: 12px; color: var(--soft); background: rgba(139, 212, 198, 0.06); }
+.transaction-progress-failed, .transaction-progress-rejected { border-color: rgba(238, 142, 157, 0.34); background: rgba(238, 142, 157, 0.07); }
+.transaction-progress-reconciliation_required { border-color: rgba(231, 188, 116, 0.34); background: rgba(231, 188, 116, 0.07); }
+.transaction-progress-heading, .transaction-progress-title, .transaction-progress-hash { display: flex; align-items: center; gap: 10px; }
+.transaction-progress-heading { justify-content: space-between; }
+.transaction-progress-title strong { color: var(--text); font-size: 13px; }
+.transaction-progress-phase { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.transaction-progress p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.transaction-progress-spinner { width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid rgba(139, 212, 198, 0.22); border-top-color: var(--accent); border-radius: 50%; animation: transaction-progress-spin .8s linear infinite; }
+.transaction-progress-hash { flex-wrap: wrap; color: var(--muted); font-size: 10px; }
+.transaction-progress-hash code { overflow-wrap: anywhere; color: var(--gold); font-size: 10px; }
+.transaction-progress-hash .quiet-button { margin-left: auto; padding: 4px 7px; color: var(--accent); font-size: 10px; }
+.transaction-progress-warning { color: var(--gold) !important; }
+.transaction-progress-reconcile { justify-self: start; margin-left: 0; }
+@keyframes transaction-progress-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .transaction-progress-spinner { animation: none; } }
 .journal-panel { margin: 0 0 20px; padding: 18px 20px; }
 .journal-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 13px; border-bottom: 1px solid var(--line); }
 .journal-heading h2 { font-size: 18px; }

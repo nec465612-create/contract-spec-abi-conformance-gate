@@ -6,12 +6,13 @@ import {
   type CaseRecord,
 } from './chain/contract'
 import { assertWalletContext, contractAddress, genlayerChain, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
-import { executeContractWrite, reconcileJournalEntry, writeIntent } from './chain/write-coordinator'
+import { executeContractWrite, reconcileJournalEntry, writeIntent, type WriteProgress } from './chain/write-coordinator'
 import { RpcBudgetError } from './chain/rpc'
 import { JournalError, JournalStore, type JournalEntry } from './persistence/journal'
 import { isRecord, jsonSafe, sha256Hex, stableStringify } from './lib/encoding'
 import { requestAccounts, useWalletProviders } from './wallet/providers'
 import { isAddress, type WalletOption, type WalletSession } from './wallet/types'
+import { TransactionProgress } from './components/TransactionProgress'
 import './styles.css'
 
 type RequirementDraft = { id: string; text: string; polarity: 'REQUIRED' | 'FORBIDDEN' }
@@ -142,11 +143,37 @@ function operationPostcondition(record: CaseRecord, method: string, before: Case
   return record.phase === 'DONE' && record.outcome === expected
 }
 
-async function verifyFailedCaseMutation(gateway: ContractGateway, caseId: string, preRevision: string, preHash: string): Promise<void> {
+async function isDifferentAcceptedOperation(record: CaseRecord, method: string, caller: string, args: unknown[]): Promise<boolean> {
+  if (!isRecord(record.last_operation)) return false
+  const operation = record.last_operation
+  const acceptedMethods = ['replace_base', 'freeze_case', 'evaluate_case', 'retry_case']
+  if (typeof operation.method !== 'string' || !acceptedMethods.includes(operation.method)) return false
+  if (typeof operation.caller !== 'string' || !/^0x[0-9a-f]{40}$/i.test(operation.caller)) return false
+  if (typeof operation.args_hash !== 'string' || !/^[0-9a-f]{64}$/i.test(operation.args_hash)) return false
+  const argsHash = await sha256Hex(stableStringify(args))
+  return !(operation.method === method
+    && operation.caller.toLowerCase() === caller.toLowerCase()
+    && operation.args_hash.toLowerCase() === argsHash)
+}
+
+async function verifyFailedCaseMutation(
+  gateway: ContractGateway,
+  caseId: string,
+  preRevision: string,
+  preHash: string,
+  method: string,
+  caller: string,
+  args: unknown[],
+): Promise<void> {
+  gateway.invalidate()
   const before = await gateway.getVersion(caseId, preRevision)
   if (!before || await caseStateHash(before) !== preHash) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
-  const after = await gateway.getVersion(caseId, String(BigInt(preRevision) + 1n))
-  if (after !== null) throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
+  const nextRevision = String(BigInt(preRevision) + 1n)
+  const after = await gateway.getVersion(caseId, nextRevision)
+  if (after === null) return
+  if (after.id !== caseId || after.revision !== nextRevision || !(await isDifferentAcceptedOperation(after, method, caller, args))) {
+    throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
+  }
 }
 
 function outcomeCopy(outcome: string): string {
@@ -261,7 +288,7 @@ function CaseList({
       </div>
       <div className="count-block">
         <span className="count-value">{count ?? '—'}</span>
-        <span className="count-label">total cases</span>
+        <span className="count-label">visible cases</span>
       </div>
       <div className="case-list" aria-label="Case list">
         {ids.map((id) => (
@@ -409,7 +436,6 @@ export default function App() {
   const walletOptions = useWalletProviders()
   const gateway = useMemo(() => (contractAddress && !runtimeConfigurationMessage() ? new ContractGateway(contractAddress) : null), [])
   const journal = useMemo(() => new JournalStore(), [])
-  const [journalLoaded, setJournalLoaded] = useState(false)
   const [journalReady, setJournalReady] = useState(false)
   const [journalError, setJournalError] = useState<string | null>(null)
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
@@ -426,24 +452,21 @@ export default function App() {
   const [replaceJson, setReplaceJson] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [writeProgress, setWriteProgress] = useState<WriteProgress>({ phase: 'IDLE' })
   const [journalPage, setJournalPage] = useState(0)
   const writeAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     void (async () => {
-      let loaded = false
       try {
         setJournalEntries(await journal.initialize())
-        loaded = true
       } catch {
         try {
           setJournalEntries(journal.loadAll())
-          loaded = true
         } catch {
           setJournalError('Transaction recovery is unavailable in this browser. Reads and writes are disabled until local storage is available.')
         }
       }
-      if (loaded) setJournalLoaded(true)
       try {
         await journal.probe()
         setJournalReady(true)
@@ -499,8 +522,9 @@ export default function App() {
     setLoadingCases(true)
     setError(null)
     try {
-      const [count, page] = await Promise.all([gateway.getCount(), gateway.listCases()])
-      setCaseCount(count)
+      gateway.invalidate()
+      const page = await gateway.listCases()
+      setCaseCount(String(page.ids.length))
       setCaseIds(page.ids)
     } catch (loadError) {
       setError(friendlyError(loadError))
@@ -509,16 +533,13 @@ export default function App() {
     }
   }, [gateway])
 
-  useEffect(() => {
-    if (journalLoaded) void refreshCases()
-  }, [journalLoaded, refreshCases])
-
   const loadCase = useCallback(async (id: string) => {
     if (!gateway) return
     setSelectedId(id)
     setLoadingCase(true)
     setError(null)
     try {
+      gateway.invalidate()
       const record = await gateway.getCase(id)
       setSelectedCase(record)
       if (record) setReplaceJson(JSON.stringify(record.base, null, 2))
@@ -558,7 +579,7 @@ export default function App() {
     writeAbortRef.current = controller
     try {
       await assertWalletContext(request.provider, request.account)
-      await executeContractWrite(journal, { ...request, signal: controller.signal })
+      await executeContractWrite(journal, { ...request, signal: controller.signal, onProgress: setWriteProgress })
       refreshJournal()
       gateway?.invalidate()
       await refreshCases()
@@ -586,6 +607,7 @@ export default function App() {
     setError(null)
     try {
       await reconcileJournalEntry(journal, entry, async () => {
+        recoveryGateway.invalidate()
         const createMatch = /^create:(0x[0-9a-f]{40}):([0-9a-f]{32})$/.exec(entry.intent)
         if (createMatch) {
           if (entry.method !== 'create_case' || createMatch[1] !== entry.account) throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
@@ -634,16 +656,30 @@ export default function App() {
         }
         return record
       }, async () => {
+        recoveryGateway.invalidate()
         const createMatch = /^create:(0x[0-9a-f]{40}):([0-9a-f]{32})$/.exec(entry.intent)
         if (createMatch) {
           const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2])
           if (id !== '0') throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
           return
         }
-        const caseMatch = /^(?:replace_base|freeze_case|evaluate_case|retry_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
-        if (!caseMatch || String(BigInt(caseMatch[2])) !== entry.pre_revision) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
-        await verifyFailedCaseMutation(recoveryGateway, caseMatch[1], entry.pre_revision, entry.pre_hash)
-      }, undefined, controller.signal)
+        const caseMatch = /^(replace_base|freeze_case|evaluate_case|retry_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
+        if (!caseMatch || String(BigInt(caseMatch[3])) !== entry.pre_revision) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
+        const args = JSON.parse(entry.args_json) as unknown
+        if (!Array.isArray(args) || args.length < 2 || typeof args[0] !== 'string' || typeof args[1] !== 'string' || args[0] !== caseMatch[2] || args[1] !== caseMatch[3]) {
+          throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
+        }
+        const operationArgs: unknown[] = [caseMatch[2]]
+        if (caseMatch[1] === 'replace_base') {
+          if (args.length !== 3 || args[2] !== caseMatch[3]) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
+          const { parsed } = normalizeBaseJson(args[1])
+          operationArgs.push(parsed, caseMatch[3])
+        } else {
+          if (args.length !== 2) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
+          operationArgs.push(caseMatch[3])
+        }
+        await verifyFailedCaseMutation(recoveryGateway, caseMatch[2], entry.pre_revision, entry.pre_hash, caseMatch[1], entry.account, operationArgs)
+      }, setWriteProgress, controller.signal)
       recoveryGateway.invalidate()
       gateway?.invalidate()
       refreshJournal()
@@ -657,6 +693,12 @@ export default function App() {
       refreshJournal()
       setBusyAction(null)
     }
+  }
+
+  const reconcileProgress = () => {
+    if (!writeProgress.hash || busyAction !== null) return
+    const entry = journalEntries.find((candidate) => candidate.tx_hash.toLowerCase() === writeProgress.hash?.toLowerCase())
+    if (entry) void reconcilePending(entry)
   }
 
   const exportJournal = () => {
@@ -695,6 +737,7 @@ export default function App() {
         preRevision: '0',
         preHash,
         readback: async () => {
+          gateway.invalidate()
           createdId = await gateway.getIdByNonce(session.account as ContractAddress, nonce)
           if (createdId === '0') throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
           const record = await gateway.getVersion(createdId, '1')
@@ -707,6 +750,7 @@ export default function App() {
           return record
         },
         failureReadback: async () => {
+          gateway.invalidate()
           const failedId = await gateway.getIdByNonce(session.account as ContractAddress, nonce)
           if (failedId !== '0') throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
         },
@@ -747,6 +791,7 @@ export default function App() {
       preRevision: expectedRevision,
       preHash,
       readback: async () => {
+        gateway.invalidate()
         const updated = await gateway.getVersion(selectedCase.id, nextRevision)
         if (!updated || updated.revision !== nextRevision || updated.primary.toLowerCase() !== session.account.toLowerCase() || !operationPostcondition(updated, method, selectedCase)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
@@ -756,7 +801,7 @@ export default function App() {
         }
         return updated
       },
-      failureReadback: () => verifyFailedCaseMutation(gateway, selectedCase.id, expectedRevision, preHash),
+      failureReadback: () => verifyFailedCaseMutation(gateway, selectedCase.id, expectedRevision, preHash, method, session.account, operationArgs),
     }, method === 'replace_base' ? 'Base specification replaced and verified.' : `${method.replace('_', ' ')} finalized and verified.`)
   }
 
@@ -804,6 +849,7 @@ export default function App() {
         {journalError && <div className="banner warning"><span className="banner-icon">!</span><span>{journalError}</span></div>}
         {notice && <div className="banner success"><span className="banner-icon">✓</span><span>{notice}</span></div>}
         {error && <div className="banner error"><span className="banner-icon">×</span><span>{error}</span><button className="banner-close" type="button" onClick={() => setError(null)} aria-label="Dismiss error">×</button></div>}
+        <TransactionProgress progress={writeProgress} onReconcile={writeProgress.phase === 'RECONCILIATION_REQUIRED' ? reconcileProgress : undefined} />
         {pendingEntries.length > 0 && <div className="banner pending"><span className="banner-icon">↻</span><span>{pendingLabel(pendingEntries[0])} has a pending transaction that must be reconciled before another action.</span>{pendingEntries[0].tx_hash && pendingContextMatches ? <button className="banner-action" type="button" disabled={busyAction !== null} onClick={() => void reconcilePending(pendingEntries[0])}>{busyAction === `reconcile:${pendingEntries[0].reservation}` ? 'Checking…' : 'Reconcile'}</button> : <span className="pending-note">{pendingEntries[0].tx_hash ? 'Read-only: different network' : 'Awaiting transaction evidence'}</span>}</div>}
 
         {journalEntries.length > 0 && <section className="journal-panel panel" aria-label="Transaction recovery journal">

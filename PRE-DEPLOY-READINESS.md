@@ -38,7 +38,7 @@ This plan applies both RPC layers: the released frontend and the primary-AI Stud
 
 - `getReadClient()` is the single configured read client. `ContractGateway` shares one cache per chain/contract; cache keys include chain ID, contract, method, and normalized arguments.
 - Identical in-flight reads are single-flight. Safe reads are cached for a short bounded window and invalidated after a write, authoritative transition, account/network change, or contract-context change. Invalidated in-flight results cannot repopulate the cache.
-- The public screen uses one deliberate `get_count` read and one `list_cases` read; case selection uses one `get_case` read. There is no continuous background poller.
+- The public screen uses one deliberate `list_cases` read per explicit refresh and reports the returned visible-page count; case selection uses one `get_case` read. There is no continuous background poller. The separate planned/evidence tables are in `docs/RPC-BUDGET.md`.
 - A write is submitted once. Finality uses only the lightweight GenLayer transaction object on a bounded `2s -> 4s -> 8s` schedule, then performs the required method-specific authoritative readback. A transient read is retried at most three times with `Retry-After` or bounded exponential backoff plus jitter and cancellation; it never resubmits the write.
 - Hidden/unmounted/disconnected views stop or cancel finality waits. RPC failures stay visibly classified as temporary RPC unavailability or reconciliation uncertainty.
 

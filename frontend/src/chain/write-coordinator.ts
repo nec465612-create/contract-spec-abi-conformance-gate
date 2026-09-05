@@ -5,6 +5,30 @@ import { JournalError, JournalStore, type JournalEntry } from '../persistence/jo
 import type { Eip1193Provider } from '../wallet/types'
 import { RpcBudgetError, sharedRpcReadQueue, sleepWithSignal, waitForDocumentVisible, withRpcRetry } from './rpc'
 
+export const TRANSACTION_PHASES = [
+  'IDLE',
+  'WAITING_FOR_WALLET',
+  'SUBMITTED',
+  'WAITING_FOR_FINALITY',
+  'VERIFYING_EXECUTION',
+  'VERIFYING_READBACK',
+  'SUCCESS',
+  'REJECTED',
+  'FAILED',
+  'RECONCILIATION_REQUIRED',
+] as const
+
+export type TransactionPhase = typeof TRANSACTION_PHASES[number]
+
+export interface WriteProgress {
+  phase: TransactionPhase
+  hash?: `0x${string}`
+  message?: string
+  persistenceDegraded?: boolean
+}
+
+type ProgressListener = (progress: WriteProgress) => void
+
 export interface ContractWriteRequest<TReadback> {
   provider: Eip1193Provider
   account: ContractAddress
@@ -17,7 +41,7 @@ export interface ContractWriteRequest<TReadback> {
   readback: () => Promise<TReadback>
   failureReadback: () => Promise<void>
   signal?: AbortSignal
-  onPhase?: (phase: 'SIGNING' | 'SUBMITTED' | 'FINALITY' | 'READBACK') => void
+  onProgress?: ProgressListener
 }
 
 export interface ContractWriteResult<TReadback> {
@@ -61,6 +85,10 @@ function rpcWriteErrorMessage(): string {
   return 'The chain RPC is temporarily rate-limited or unavailable. The transaction hash is retained; wait and reconcile later without resubmitting.'
 }
 
+function emitProgress(listener: ProgressListener | undefined, phase: TransactionPhase, extras: Omit<WriteProgress, 'phase'> = {}): void {
+  listener?.({ phase, ...extras })
+}
+
 /**
  * Uses the current SDK's lightweight transaction read with a bounded 2/4/8-second
  * schedule. Transient RPC failures use the shared bounded retry policy; it
@@ -95,18 +123,24 @@ export async function executeContractWrite<TReadback>(
   store: JournalStore,
   request: ContractWriteRequest<TReadback>,
 ): Promise<ContractWriteResult<TReadback>> {
-  const entry = await store.reserve({
-    chain: String(genlayerChain.id),
-    contract: request.contract,
-    account: request.account,
-    method: request.method,
-    intent: request.intent,
-    args: request.args,
-    pre_revision: request.preRevision,
-    pre_hash: request.preHash,
-  })
+  emitProgress(request.onProgress, 'WAITING_FOR_WALLET')
+  let entry: JournalEntry
+  try {
+    entry = await store.reserve({
+      chain: String(genlayerChain.id),
+      contract: request.contract,
+      account: request.account,
+      method: request.method,
+      intent: request.intent,
+      args: request.args,
+      pre_revision: request.preRevision,
+      pre_hash: request.preHash,
+    })
+  } catch (error) {
+    emitProgress(request.onProgress, userRejected(error) ? 'REJECTED' : 'FAILED', { message: safeErrorMessage(error) })
+    throw error
+  }
   const client = getWriteClient(request.provider, request.account)
-  request.onPhase?.('SIGNING')
 
   let hash: TransactionHash | undefined
   let submitted = false
@@ -121,7 +155,7 @@ export async function executeContractWrite<TReadback>(
     hash = returned as TransactionHash
     await store.markSubmitted(entry, hash)
     submitted = true
-    request.onPhase?.('SUBMITTED')
+    emitProgress(request.onProgress, 'SUBMITTED', { hash: hash as `0x${string}` })
   } catch (error) {
     if (userRejected(error) && !hash) {
       try {
@@ -129,6 +163,7 @@ export async function executeContractWrite<TReadback>(
       } catch {
         throw new WriteCoordinatorError('JOURNAL_CLEANUP_FAILED', 'The wallet request was cancelled, but local recovery could not be updated. Do not retry until the journal is reviewed.')
       }
+      emitProgress(request.onProgress, 'REJECTED', { message: 'The wallet request was cancelled.' })
       throw new WriteCoordinatorError('USER_REJECTED', 'The wallet request was cancelled.')
     }
     // A hash returned by the wallet is evidence even if the first local write
@@ -137,6 +172,10 @@ export async function executeContractWrite<TReadback>(
       try { await store.markReconcile(entry, hash) } catch { /* keep the original uncertainty visible */ }
     }
     await preserveUncertain(store, entry)
+    emitProgress(request.onProgress, 'RECONCILIATION_REQUIRED', {
+      hash: hash as `0x${string}` | undefined,
+      message: safeErrorMessage(error),
+    })
     throw new WriteCoordinatorError('SUBMISSION_UNCERTAIN', safeErrorMessage(error))
   }
 
@@ -144,13 +183,18 @@ export async function executeContractWrite<TReadback>(
 
   let receipt: GenLayerTransaction
   try {
-    request.onPhase?.('FINALITY')
+    emitProgress(request.onProgress, 'WAITING_FOR_FINALITY', { hash: hash as `0x${string}` })
     receipt = await waitForFinality(hash, request.signal)
   } catch (error) {
     await preserveUncertain(store, entry)
+    emitProgress(request.onProgress, 'RECONCILIATION_REQUIRED', {
+      hash: hash as `0x${string}`,
+      message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : safeErrorMessage(error),
+    })
     throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : 'FINALITY_UNCERTAIN', error instanceof RpcBudgetError ? rpcWriteErrorMessage() : safeErrorMessage(error))
   }
 
+  emitProgress(request.onProgress, 'VERIFYING_EXECUTION', { hash: hash as `0x${string}` })
   const classified = classifyReceipt(receipt)
   if (!classified.ok) {
     const current = store.find(entry.reservation)
@@ -158,24 +202,35 @@ export async function executeContractWrite<TReadback>(
       try {
         await request.failureReadback()
         await store.markFinalizedError(store.find(entry.reservation))
+        emitProgress(request.onProgress, 'FAILED', { hash: hash as `0x${string}`, message: classified.message })
       } catch (error) {
         await preserveUncertain(store, entry)
+        emitProgress(request.onProgress, 'RECONCILIATION_REQUIRED', {
+          hash: hash as `0x${string}`,
+          message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The failed transaction needs authoritative reconciliation.',
+        })
         throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : 'FINALIZED_ERROR_READBACK_UNCERTAIN', error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The transaction failed at finality, but its pre-state could not be authoritatively checked. The record remains blocked.')
       }
     } else {
       await store.markReconcile(current)
+      emitProgress(request.onProgress, 'RECONCILIATION_REQUIRED', { hash: hash as `0x${string}`, message: classified.message })
     }
     throw new WriteCoordinatorError(classified.kind.toUpperCase(), classified.message)
   }
 
   try {
-    request.onPhase?.('READBACK')
+    emitProgress(request.onProgress, 'VERIFYING_READBACK', { hash: hash as `0x${string}` })
     const readback = await request.readback()
     const current = store.find(entry.reservation)
     const verified = await store.markVerified(current)
+    emitProgress(request.onProgress, 'SUCCESS', { hash: hash as `0x${string}` })
     return { hash, receipt, readback, journal: verified }
   } catch (error) {
     await preserveUncertain(store, entry)
+    emitProgress(request.onProgress, 'RECONCILIATION_REQUIRED', {
+      hash: hash as `0x${string}`,
+      message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The finalized transaction needs authoritative reconciliation.',
+    })
     throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : 'READBACK_UNCERTAIN', error instanceof RpcBudgetError ? rpcWriteErrorMessage() : safeErrorMessage(error))
   }
 }
@@ -185,7 +240,7 @@ export async function reconcileJournalEntry<TReadback>(
   entry: JournalEntry,
   readback: () => Promise<TReadback>,
   failureReadback: () => Promise<void>,
-  onPhase?: (phase: 'FINALITY' | 'READBACK') => void,
+  onProgress?: ProgressListener,
   signal?: AbortSignal,
 ): Promise<ReconciliationResult<TReadback>> {
   if (entry.chain !== String(genlayerChain.id)) throw new WriteCoordinatorError('OLD_CONTEXT_READONLY', 'This pending action belongs to another network context and remains read-only.')
@@ -195,33 +250,51 @@ export async function reconcileJournalEntry<TReadback>(
 
   let receipt: GenLayerTransaction
   try {
-    onPhase?.('FINALITY')
+    emitProgress(onProgress, 'WAITING_FOR_FINALITY', { hash: entry.tx_hash as `0x${string}` })
     receipt = await withRpcRetry(() => sharedRpcReadQueue.run(() => getReadClient().getTransaction({ hash: entry.tx_hash as TransactionHash }), signal), { signal })
   } catch (error) {
+    emitProgress(onProgress, 'RECONCILIATION_REQUIRED', {
+      hash: entry.tx_hash as `0x${string}`,
+      message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The transaction is still awaiting authoritative finality.',
+    })
     throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : 'FINALITY_UNCERTAIN', error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The transaction is still awaiting authoritative finality.')
   }
 
+  emitProgress(onProgress, 'VERIFYING_EXECUTION', { hash: entry.tx_hash as `0x${string}` })
   const classified = classifyReceipt(receipt)
   if (!classified.ok) {
     if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') {
       try {
         await failureReadback()
         await store.markFinalizedError(store.find(entry.reservation))
+        emitProgress(onProgress, 'FAILED', { hash: entry.tx_hash as `0x${string}`, message: classified.message })
       } catch (error) {
         await preserveUncertain(store, entry)
+        emitProgress(onProgress, 'RECONCILIATION_REQUIRED', {
+          hash: entry.tx_hash as `0x${string}`,
+          message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The failed transaction needs authoritative reconciliation.',
+        })
         throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : 'FINALIZED_ERROR_READBACK_UNCERTAIN', error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The transaction failed at finality, but its pre-state could not be authoritatively checked. The record remains blocked.')
       }
+    }
+    if (classified.kind !== 'execution-failed' && classified.kind !== 'consensus-failed') {
+      emitProgress(onProgress, 'RECONCILIATION_REQUIRED', { hash: entry.tx_hash as `0x${string}`, message: classified.message })
     }
     throw new WriteCoordinatorError(classified.kind.toUpperCase(), classified.message)
   }
 
   try {
-    onPhase?.('READBACK')
+    emitProgress(onProgress, 'VERIFYING_READBACK', { hash: entry.tx_hash as `0x${string}` })
     const result = await readback()
     const verified = await store.markVerified(store.find(entry.reservation))
+    emitProgress(onProgress, 'SUCCESS', { hash: entry.tx_hash as `0x${string}` })
     return { hash: entry.tx_hash as `0x${string}`, receipt, readback: result, journal: verified }
   } catch (error) {
     await preserveUncertain(store, entry)
+    emitProgress(onProgress, 'RECONCILIATION_REQUIRED', {
+      hash: entry.tx_hash as `0x${string}`,
+      message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The finalized transaction needs authoritative reconciliation.',
+    })
     throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : 'READBACK_UNCERTAIN', error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The transaction finalized, but its authoritative state is not visible yet.')
   }
 }
