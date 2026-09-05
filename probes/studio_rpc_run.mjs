@@ -21,6 +21,14 @@ const STATUS_SCHEDULE_SECONDS = [10, 20, 40, 80]
 const MAX_STATUS_CHECKS = STATUS_SCHEDULE_SECONDS.length
 const REQUEST_TIMEOUT_MS = 30_000
 const OPERATION_TIMEOUT_MS = 240_000
+const RETAINED_PARTIAL_EVIDENCE = Object.freeze({
+  file: 'studio-rpc-run-1788639450020.json',
+  sha256: 'CD5084333797668CA3C13852B51E859111E0C2E264B806A6A1544116FBA68C7C',
+})
+const RETAINED_PARTIAL_READBACK = Object.freeze({
+  file: 'studio-adapted-partial-reconciliation-1788639450020.json',
+  sha256: 'A785FEE34E60495EB96B24589942195CC3184B1F18FA2DCA5C38C592DB1068B6',
+})
 const OPERATION_REQUEST_CAPS = Object.freeze({
   'S0-funding': 1,
   'S0-preflight': 2,
@@ -107,9 +115,16 @@ function hashMatches(value, expected) {
   return typeof value === 'string' && value.toLowerCase() === expected.toLowerCase()
 }
 
-function resolveEvidencePath(value, label) {
-  if (!value || !/^[a-zA-Z0-9._-]+\.json$/.test(value)) throw new Error(`${label} must be a simple JSON filename.`)
+function resolveEvidencePath(value, label, retained) {
+  if (value !== retained.file) throw new Error(`${label} must equal retained evidence file ${retained.file}.`)
   return resolve(ROOT, 'docs', 'evidence', value)
+}
+
+async function readRetainedEvidence(path, label, retained) {
+  const bytes = await readFile(path)
+  const actualSha256 = createHash('sha256').update(bytes).digest('hex').toUpperCase()
+  if (actualSha256 !== retained.sha256) throw new Error(`${label} hash mismatch: ${actualSha256}`)
+  return JSON.parse(bytes.toString('utf8'))
 }
 
 async function writeEvidenceFile(evidence) {
@@ -210,10 +225,10 @@ try {
     }
   }
   if (PARTIAL_RESUME_MODE) {
-    const partialEvidenceFile = resolveEvidencePath(requestedPartialEvidencePath, 'STUDIO_PARTIAL_EVIDENCE_PATH')
-    const partialReadbackFile = resolveEvidencePath(requestedPartialReadbackPath, 'STUDIO_PARTIAL_READBACK_PATH')
-    const prior = JSON.parse(await readFile(partialEvidenceFile, 'utf8'))
-    const readback = JSON.parse(await readFile(partialReadbackFile, 'utf8'))
+    const partialEvidenceFile = resolveEvidencePath(requestedPartialEvidencePath, 'STUDIO_PARTIAL_EVIDENCE_PATH', RETAINED_PARTIAL_EVIDENCE)
+    const partialReadbackFile = resolveEvidencePath(requestedPartialReadbackPath, 'STUDIO_PARTIAL_READBACK_PATH', RETAINED_PARTIAL_READBACK)
+    const prior = await readRetainedEvidence(partialEvidenceFile, 'STUDIO_PARTIAL_EVIDENCE_PATH', RETAINED_PARTIAL_EVIDENCE)
+    const readback = await readRetainedEvidence(partialReadbackFile, 'STUDIO_PARTIAL_READBACK_PATH', RETAINED_PARTIAL_READBACK)
     const expectedOperations = ['S0-funding', 'S0-preflight', 'S1-schema', 'S2-deploy', 'S3-create-case1']
     const priorOperations = prior.operations?.map((item) => item.id)
     const deploymentRow = prior.transactions?.find((item) => item.id === 'S2-deploy')
