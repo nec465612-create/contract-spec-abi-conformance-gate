@@ -151,8 +151,16 @@ try {
   }
   if (!RESUME_MODE && !RESTART_MODE) {
     try {
-      await readFile(RESUME_MANIFEST_PATH, 'utf8')
-      throw new Error('A finalized partial deployment manifest exists; refusing a second deployment. Use the approved resume or explicit partial-run restart mode.')
+      const existingManifest = JSON.parse(await readFile(RESUME_MANIFEST_PATH, 'utf8'))
+      if (existingManifest.sourceCommit === EXPECTED_SOURCE_COMMIT && existingManifest.sourceSha256 === EXPECTED_SOURCE_SHA256) {
+        throw new Error('A finalized partial deployment manifest exists for the current source; refusing a second deployment. Use the approved resume or explicit partial-run restart mode.')
+      }
+      resumeEvidenceSummary = {
+        historicalManifestIgnored: true,
+        manifest: 'docs/evidence/studio-rpc-recovery-manifest.json',
+        manifestSourceCommit: existingManifest.sourceCommit ?? null,
+        manifestSourceSha256: existingManifest.sourceSha256 ?? null,
+      }
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
     }
