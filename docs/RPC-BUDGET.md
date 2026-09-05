@@ -1,8 +1,8 @@
 # RPC budget matrix
 
-Status: PRE_DEPLOY CHANGES REQUIRED. The original frozen Studio run remains historical evidence only; its RPC-STUDIO-001 measurement gap is not being replayed. The corrected measured runner is awaiting refreshed anonymous PRE_DEPLOY review, and frontend release evidence remains intentionally pending Vercel E2E.
+Status: PRE_DEPLOY CHANGES REQUIRED. The original frozen Studio run remains historical evidence only; its RPC-STUDIO-001 measurement gap is not being replayed. The corrected runner and its locked partial-recovery state are awaiting refreshed anonymous PRE_DEPLOY review, and frontend release evidence remains intentionally pending Vercel E2E.
 
-Revision binding: the historical frozen Studio ledger binds to source commit de66367b459ed421b73bdfb7f3d04bf15088ed38, contract source SHA-256 AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45, chain 61999, contract 0x6de11297EaF221eb95A9E34e5A0e418061789250, and account 0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902. The blocked measured attempt has the same source binding and one finalized disposable deployment at 0xd1FADDEfbbCbF737e56a9E23803650c02c3369E2 with hash 0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84; its recovery manifest is authoritative for resume mode. Studio and frontend budgets are separate ledgers. A result in one ledger cannot satisfy the other.
+Revision binding: the historical frozen Studio ledger binds to source commit de66367b459ed421b73bdfb7f3d04bf15088ed38, contract source SHA-256 AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45, chain 61999, contract 0x6de11297EaF221eb95A9E34e5A0e418061789250, and account 0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902. The measured recovery state has the same source binding and one finalized disposable deployment at 0xd1FADDEfbbCbF737e56a9E23803650c02c3369E2 with hash 0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84. Its manifest is now `BLOCKED_PARTIAL_CASE_ACCEPTED`: case 1 has an accepted owner-bound write and the creator key was not retained, so the old deployment is not resumable; only the explicit replacement mode below is permitted. Studio and frontend budgets are separate ledgers. A result in one ledger cannot satisfy the other.
 
 ## Shared budget rules
 
@@ -48,15 +48,15 @@ The runner's explicit S0–S12 sequence is: disposable funding, chain/account pr
 STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node probes/studio_rpc_run.mjs
 ```
 
-Because the first measured attempt finalized its one allowed deployment before the rate limiter blocked S3, the current recovery command must use the exact fail-closed resume binding (and never the fresh-deploy command):
+The initial measured attempt finalized the deployment before the rate limiter blocked S3. A later exact recovery run submitted case 1 and Studio finalized it with consensus execution classification `SUCCESS`; because the creator key was not retained, the manifest now prohibits resuming that deployment. The only permitted next live command, after the exact refreshed PRE_DEPLOY review and the observed cooldown, is the explicit replacement command:
 
 ```text
-STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN STUDIO_RESUME_DEPLOYMENT_HASH=0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84 STUDIO_RESUME_CONTRACT_ADDRESS=0xd1FADDEfbbCbF737e56a9E23803650c02c3369E2 node probes/studio_rpc_run.mjs
+STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN STUDIO_RESTART_PARTIAL_RUN=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node probes/studio_rpc_run.mjs
 ```
 
-This runner is preparation only until a fresh exact-revision PRE_DEPLOY gate authorizes the disposable deployment. The historical rows below remain unchanged and still do not claim measurements from the frozen UI run.
+The former `STUDIO_RESUME_DEPLOYMENT_HASH` / `STUDIO_RESUME_CONTRACT_ADDRESS` command is deliberately blocked before RPC for this manifest; it must not be used. The replacement command is preparation only until a fresh exact-revision PRE_DEPLOY gate authorizes the one replacement disposable deployment. The historical rows below remain unchanged and still do not claim measurements from the frozen UI run.
 
-The endpoint is pinned to `https://studio.genlayer.com/api`; any `STUDIO_RPC_ENDPOINT` override that differs from that exact value produces secret-free BLOCKED evidence with zero RPC requests. The instrument also emits one global `rpcRequests` list, operation-local events, row caps, request/operation deadlines, and immediately retained submission hashes. The first approved run reached one finalized deployment but was rate-limited before the first case write; its exact deployment hash/address are recorded in [studio-rpc-recovery-manifest.json](evidence/studio-rpc-recovery-manifest.json). The fail-closed resume mode revalidates that deployment read-only and never submits a second deployment; it requires a fresh PRE_DEPLOY review of the resume-capable HEAD before continuing the unique case writes.
+The endpoint is pinned to `https://studio.genlayer.com/api`; any `STUDIO_RPC_ENDPOINT` override that differs from that exact value produces secret-free BLOCKED evidence with zero RPC requests. The instrument also emits one global `rpcRequests` list, operation-local events, row caps, request/operation deadlines, and immediately retained submission hashes. The partial deployment, accepted case-1 hash, creator address, and replacement-only recovery rule are recorded in [studio-rpc-recovery-manifest.json](evidence/studio-rpc-recovery-manifest.json). The first replacement attempt was stopped at S0 by the Studio `500 requests per hour` limiter with `Retry-After: 1297`, zero transactions, and no deployment; retries remain paused until that cooldown expires.
 
 ### Historical frozen UI status (not the new measured run)
 
