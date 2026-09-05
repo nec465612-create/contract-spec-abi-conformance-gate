@@ -55,6 +55,9 @@ const IMMUTABLE_FIELDS: readonly (keyof JournalEntry)[] = [
   'v', 'reservation', 'chain', 'contract', 'account', 'method', 'intent',
   'args_json', 'pre_revision', 'pre_hash', 'created_ms',
 ]
+const ENTRY_KEYS: readonly (keyof JournalEntry)[] = [
+  ...IMMUTABLE_FIELDS, 'tx_hash', 'status',
+]
 
 function defaultStorage(): Storage | null {
   try {
@@ -97,7 +100,9 @@ function assertEntry(value: unknown): asserts value is JournalEntry {
   if (!value || typeof value !== 'object') throw new JournalError('CORRUPT_JOURNAL')
   const item = value as Partial<JournalEntry>
   const argsJson = item.args_json
+  const keys = Object.keys(value)
   if (
+    keys.length !== ENTRY_KEYS.length || keys.some((key) => !ENTRY_KEYS.includes(key as keyof JournalEntry)) ||
     item.v !== 1 ||
     typeof item.reservation !== 'string' || !RESERVATION_RE.test(item.reservation) || item.reservation !== item.reservation.toLowerCase() ||
     typeof item.chain !== 'string' || !DECIMAL_RE.test(item.chain) ||
@@ -306,6 +311,9 @@ export class JournalStore {
     this.assertImmutable(current, entry)
     const nextHash = txHash === undefined ? current.tx_hash : txHash.toLowerCase()
     if (current.tx_hash && nextHash !== current.tx_hash) throw new JournalError('IMMUTABLE_TX_HASH')
+    if (current.status === 'RECONCILE' && current.tx_hash === '' && status === 'SUBMITTED') {
+      throw new JournalError('LOST_TRANSACTION_HASH')
+    }
     if (!canTransition(current.status, status)) throw new JournalError('INVALID_JOURNAL_TRANSITION')
     if (nextHash !== '' && !TX_HASH_RE.test(nextHash)) throw new JournalError('INVALID_TX_HASH')
     const next = { ...current, status, tx_hash: nextHash }
@@ -327,11 +335,12 @@ export class JournalStore {
     try {
       parsed = JSON.parse(raw)
     } catch {
-      throw new JournalError('CORRUPT_JOURNAL_INDEX')
+      return []
     }
     if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== 'string' || !isJournalKey(value))) {
-      throw new JournalError('CORRUPT_JOURNAL_INDEX')
+      return []
     }
+    if (new Set(parsed).size !== parsed.length) return []
     return parsed
   }
 

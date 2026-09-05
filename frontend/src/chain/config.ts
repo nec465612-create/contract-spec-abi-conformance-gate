@@ -6,6 +6,7 @@ import type { Eip1193Provider } from '../wallet/types'
 export type ContractAddress = `0x${string}`
 export type GenLayerClient = ReturnType<typeof createClient>
 type CreateClientConfig = NonNullable<Parameters<typeof createClient>[0]>
+type WalletProvider = Pick<Eip1193Provider, 'request'>
 
 const configuredAddress = import.meta.env.VITE_CONTRACT_ADDRESS?.trim() ?? ''
 const configuredRpcUrl = import.meta.env.VITE_GENLAYER_RPC_URL?.trim() ?? ''
@@ -24,6 +25,23 @@ export function runtimeConfigurationMessage(): string | null {
   if (!contractAddress) return 'The configured contract address is malformed.'
   if (configuredRpcUrl && !RPC_URL_RE.test(configuredRpcUrl)) return 'The configured network endpoint is malformed.'
   return null
+}
+
+function parseChainId(value: unknown): bigint | null {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value)
+  if (typeof value !== 'string') return null
+  if (/^0x[0-9a-f]+$/i.test(value)) return BigInt(value)
+  if (/^[0-9]+$/.test(value)) return BigInt(value)
+  return null
+}
+
+export async function assertWalletContext(provider: WalletProvider, account: ContractAddress): Promise<void> {
+  const chainId = parseChainId(await provider.request({ method: 'eth_chainId' }))
+  if (chainId !== BigInt(genlayerChain.id)) throw new Error('WRONG_NETWORK')
+  const accounts = await provider.request({ method: 'eth_accounts' })
+  if (!Array.isArray(accounts) || accounts.length === 0 || typeof accounts[0] !== 'string' || accounts[0].toLowerCase() !== account.toLowerCase()) {
+    throw new Error('WALLET_ACCOUNT_CHANGED')
+  }
 }
 
 let readClient: GenLayerClient | null = null

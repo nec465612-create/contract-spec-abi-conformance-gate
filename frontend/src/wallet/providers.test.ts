@@ -30,6 +30,8 @@ describe('wallet discovery', () => {
     expect(walletIdFromEip6963({ name: 'OKX Wallet', rdns: 'com.okx.wallet' })).toBe('okx')
     expect(walletIdFromEip6963({ name: 'Rabby Wallet', rdns: 'io.rabby' })).toBe('rabby')
     expect(walletIdFromEip6963({ name: 'Injected Wallet', rdns: 'com.example' })).toBeNull()
+    expect(walletIdFromEip6963({ name: 'MetaMask clone', rdns: 'io.metamask.example' })).toBeNull()
+    expect(walletIdFromEip6963({ name: 'Rabby', rdns: 'com.debank.rabby' })).toBeNull()
   })
 
   it('discovers zero, one, and three supported wallets without generic tiles', () => {
@@ -69,6 +71,20 @@ describe('wallet discovery', () => {
     expect(registry.snapshot()).toHaveLength(1)
     expect(registry.snapshot()[0].source).toBe('eip6963')
     expect(registry.snapshot()[0].provider).toBe(announced)
+  })
+
+  it('keeps one tile per supported wallet even when providers announce different UUIDs', () => {
+    const host = window as Window & { ethereum?: Eip1193Provider }
+    const registry = new ProviderRegistry(host)
+    registries.push(registry)
+    registry.start()
+    fireEvent(window, new CustomEvent('eip6963:announceProvider', {
+      detail: { info: { uuid: 'rabby-1', name: 'Rabby', icon: 'data:image/svg+xml,rabby', rdns: 'io.rabby' }, provider: provider() },
+    }))
+    fireEvent(window, new CustomEvent('eip6963:announceProvider', {
+      detail: { info: { uuid: 'rabby-2', name: 'Rabby Wallet', icon: 'data:image/svg+xml,rabby2', rdns: 'io.rabby' }, provider: provider() },
+    }))
+    expect(registry.snapshot().filter((item) => item.id === 'rabby')).toHaveLength(1)
   })
 
   it('does not request accounts while discovering, and requests them only after selection', async () => {

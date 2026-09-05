@@ -17,10 +17,11 @@ function normalizedIdentity(value: unknown): string {
 }
 
 export function walletIdFromEip6963(info: Pick<Eip6963ProviderInfo, 'name' | 'rdns'>): WalletId | null {
-  const identity = `${normalizedIdentity(info.rdns)} ${normalizedIdentity(info.name)}`
-  if (identity.includes('io.metamask') || identity.includes('metamask')) return 'metamask'
-  if (identity.includes('okx') || identity.includes('okex')) return 'okx'
-  if (identity.includes('rabby') || identity.includes('debank')) return 'rabby'
+  const rdns = normalizedIdentity(info.rdns)
+  const name = normalizedIdentity(info.name)
+  if (rdns === 'io.metamask' && name === 'metamask') return 'metamask'
+  if ((rdns === 'com.okx.wallet' || rdns === 'com.okex.wallet') && (name === 'okx wallet' || name === 'okx')) return 'okx'
+  if (rdns === 'io.rabby' && (name === 'rabby' || name === 'rabby wallet')) return 'rabby'
   return null
 }
 
@@ -121,11 +122,15 @@ export class ProviderRegistry {
   private upsert(option: WalletOption): void {
     const sameProvider = this.options.findIndex((item) => item.provider === option.provider)
     const sameUuid = option.uuid ? this.options.findIndex((item) => item.uuid === option.uuid) : -1
-    const existingIndex = sameProvider >= 0 ? sameProvider : sameUuid
+    const sameWallet = this.options.findIndex((item) => item.id === option.id)
+    const existingIndex = sameProvider >= 0 ? sameProvider : sameUuid >= 0 ? sameUuid : sameWallet
 
     if (existingIndex >= 0) {
+      if (this.options[existingIndex].id !== option.id) return
+      if (sameWallet >= 0 && sameWallet !== existingIndex && option.source !== 'eip6963') return
       const next = [...this.options]
       next[existingIndex] = { ...next[existingIndex], ...option }
+      if (sameWallet >= 0 && sameWallet !== existingIndex) next.splice(sameWallet, 1)
       this.options = sortOptions(next)
       this.emit()
       return
@@ -134,7 +139,7 @@ export class ProviderRegistry {
     if (option.source === 'eip6963') {
       // A named announcement is authoritative for that wallet and replaces its legacy fallback.
       this.options = this.options.filter((item) => !(item.id === option.id && item.source === 'legacy'))
-    } else if (this.options.some((item) => item.id === option.id)) {
+    } else if (sameWallet >= 0) {
       return
     }
 

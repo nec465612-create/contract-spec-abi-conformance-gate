@@ -53,6 +53,15 @@ describe('journal', () => {
     expect(store.loadAll().map((item) => item.reservation)).toEqual([entry.reservation])
   })
 
+  it('rebuilds from namespaced records when the index is malformed', async () => {
+    const store = new JournalStore(localStorage, lockManager())
+    const entry = await store.reserve(baseInput)
+    localStorage.setItem('glj1:index', '{bad')
+    expect(store.loadAll().map((item) => item.reservation)).toEqual([entry.reservation])
+    await store.initialize()
+    expect(JSON.parse(localStorage.getItem('glj1:index') ?? '[]')).toEqual([`glj1:${entry.reservation}`])
+  })
+
   it('fails closed when exclusive recovery locking is unavailable', async () => {
     const store = new JournalStore(localStorage, undefined)
     await expect(store.reserve(baseInput)).rejects.toMatchObject({ code: 'JOURNAL_LOCK_UNAVAILABLE' })
@@ -70,5 +79,19 @@ describe('journal', () => {
   it('rejects corrupt records instead of silently ignoring them', () => {
     localStorage.setItem('glj1:99999999999999999999999999999999', '{bad')
     expect(() => new JournalStore(localStorage, lockManager()).loadAll()).toThrow(JournalError)
+  })
+
+  it('rejects extra record keys and never promotes a lost hash', async () => {
+    const store = new JournalStore(localStorage, lockManager())
+    const entry = await store.reserve(baseInput)
+    const raw = JSON.parse(localStorage.getItem(`glj1:${entry.reservation}`) ?? '{}')
+    raw.extra = true
+    localStorage.setItem(`glj1:${entry.reservation}`, JSON.stringify(raw))
+    expect(() => store.loadAll()).toThrow(JournalError)
+
+    localStorage.clear()
+    const pending = await store.reserve(baseInput)
+    const reconciled = await store.markReconcile(pending)
+    await expect(store.markSubmitted(reconciled, `0x${'2'.repeat(64)}`)).rejects.toMatchObject({ code: 'LOST_TRANSACTION_HASH' })
   })
 })

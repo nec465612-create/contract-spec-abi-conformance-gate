@@ -160,6 +160,16 @@ def test_input_caps_controls_extra_keys_and_bool_as_integer(
         contract.list_cases(True, 1)
 
 
+def test_u256_rejects_strings_and_floats_without_truncation(
+    direct_vm, direct_deploy, direct_alice
+):
+    contract = deploy(direct_vm, direct_deploy, direct_alice)
+    with direct_vm.expect_revert("BAD_INTEGER"):
+        contract.list_cases("1", 1)
+    with direct_vm.expect_revert("BAD_INTEGER"):
+        contract.create_case(NONCE, encoded(base()), "0")
+
+
 def test_evaluate_conformant_and_validator_disagreement(
     direct_vm, direct_deploy, direct_alice
 ):
@@ -182,6 +192,32 @@ def test_evaluate_conformant_and_validator_disagreement(
     direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", '{"v":1,"labels":["NONE"]}')
     assert direct_vm.run_validator() is False
     assert record(contract) == final
+
+
+def test_oversized_model_result_is_a_no_write_failure(
+    direct_vm, direct_deploy, direct_alice
+):
+    contract = deploy(direct_vm, direct_deploy, direct_alice)
+    create(contract)
+    contract.freeze_case(1, 1)
+    before = contract.get_case(1)
+    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", " " * 4097)
+    with direct_vm.expect_revert("CAPACITY"):
+        contract.evaluate_case(1, 2)
+    assert contract.get_case(1) == before
+
+
+def test_draft_revision_reservation_blocks_the_last_incomplete_path(
+    direct_vm, direct_deploy, direct_alice
+):
+    contract = deploy(direct_vm, direct_deploy, direct_alice)
+    create(contract)
+    for revision in range(1, 28):
+        contract.replace_base(1, encoded(base()), revision)
+    before = contract.get_case(1)
+    with direct_vm.expect_revert("CAPACITY"):
+        contract.replace_base(1, encoded(base()), 28)
+    assert contract.get_case(1) == before
 
 
 def test_reducer_precedence_and_polarity_shape(

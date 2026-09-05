@@ -1,6 +1,6 @@
 import { TransactionStatus, type CalldataEncodable, type GenLayerTransaction, type TransactionHash } from 'genlayer-js/types'
 import { genlayerChain, getReadClient, getWriteClient, type ContractAddress } from './config'
-import { classifyReceipt, isTransactionHash } from './receipt'
+import { classifyReceipt, isFinalizedReceipt, isTransactionHash, receiptStatus } from './receipt'
 import { JournalError, JournalStore, type JournalEntry } from '../persistence/journal'
 import type { Eip1193Provider } from '../wallet/types'
 
@@ -14,7 +14,7 @@ export interface ContractWriteRequest<TReadback> {
   preRevision: string
   preHash: string
   readback: () => Promise<TReadback>
-  failureReadback?: () => Promise<void>
+  failureReadback: () => Promise<void>
   onPhase?: (phase: 'SIGNING' | 'SUBMITTED' | 'FINALITY' | 'READBACK') => void
 }
 
@@ -58,10 +58,6 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 }
 
-function finalized(receipt: GenLayerTransaction): boolean {
-  return receipt.statusName === TransactionStatus.FINALIZED || receipt.status === TransactionStatus.FINALIZED || receipt.status === 7
-}
-
 /**
  * Uses the current SDK's lightweight transaction read with a bounded 2/4/8-second
  * schedule. It deliberately does not use an unbounded SDK poller.
@@ -72,8 +68,10 @@ async function waitForFinality(hash: TransactionHash): Promise<GenLayerTransacti
   for (const delay of [2_000, 4_000, 8_000]) {
     await sleep(delay)
     last = await client.getTransaction({ hash })
-    if (finalized(last)) return last
-    if (last.statusName === TransactionStatus.CANCELED || last.statusName === TransactionStatus.VALIDATORS_TIMEOUT || last.statusName === TransactionStatus.LEADER_TIMEOUT) return last
+    const status = receiptStatus(last)
+    if (status.contradictory) throw new WriteCoordinatorError('INVALID_RECEIPT', 'The transaction receipt contains contradictory status fields.')
+    if (isFinalizedReceipt(last)) return last
+    if (status.value === TransactionStatus.CANCELED || status.value === TransactionStatus.VALIDATORS_TIMEOUT || status.value === TransactionStatus.LEADER_TIMEOUT) return last
   }
   throw new WriteCoordinatorError('FINALITY_UNCERTAIN', last ? `The transaction remains ${last.statusName ?? 'pending'} after bounded checks.` : 'The transaction remains pending after bounded checks.')
 }
@@ -152,7 +150,7 @@ export async function executeContractWrite<TReadback>(
     const current = store.find(entry.reservation)
     if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') {
       try {
-        await request.failureReadback?.()
+        await request.failureReadback()
         await store.markFinalizedError(store.find(entry.reservation))
       } catch {
         await preserveUncertain(store, entry)
@@ -180,8 +178,8 @@ export async function reconcileJournalEntry<TReadback>(
   store: JournalStore,
   entry: JournalEntry,
   readback: () => Promise<TReadback>,
+  failureReadback: () => Promise<void>,
   onPhase?: (phase: 'FINALITY' | 'READBACK') => void,
-  failureReadback?: () => Promise<void>,
 ): Promise<ReconciliationResult<TReadback>> {
   if (entry.chain !== String(genlayerChain.id)) throw new WriteCoordinatorError('OLD_CONTEXT_READONLY', 'This pending action belongs to another network context and remains read-only.')
   if (!isTransactionHash(entry.tx_hash)) throw new WriteCoordinatorError('NO_TRANSACTION_HASH', 'This pending action has no transaction hash to reconcile.')
@@ -200,7 +198,7 @@ export async function reconcileJournalEntry<TReadback>(
   if (!classified.ok) {
     if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') {
       try {
-        await failureReadback?.()
+        await failureReadback()
         await store.markFinalizedError(store.find(entry.reservation))
       } catch {
         await preserveUncertain(store, entry)

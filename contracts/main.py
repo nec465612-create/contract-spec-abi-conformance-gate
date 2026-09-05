@@ -65,13 +65,8 @@ def _is_int(value) -> bool:
 
 
 def _u256_value(value, *, minimum=0, maximum=MAX_U256) -> int:
-    if isinstance(value, bool):
-        raise gl.vm.UserError("BAD_INTEGER")
     if not _is_int(value):
-        try:
-            value = int(value)
-        except Exception:
-            raise gl.vm.UserError("BAD_INTEGER")
+        raise gl.vm.UserError("BAD_INTEGER")
     if value < minimum or value > maximum:
         raise gl.vm.UserError("BAD_INTEGER")
     return value

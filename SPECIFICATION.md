@@ -11,6 +11,10 @@ Protocol authors freeze a bounded set of REQUIRED/FORBIDDEN prose requirements a
 
 The product evaluates only the exact submitted bytes. It does not inspect deployed bytecode, prove implementation correctness, verify external facts, or claim that an interface is secure. The on-chain consequence is eligibility: only `CONFORMANT` is eligible. No token, payment, custody, external API, linked contract, backend, or automatic timer is in scope.
 
+## Lifecycle classification
+
+This single contract is `INTENTIONALLY FROZEN`. The binding Stage 2 baseline excludes an upgrade mechanism, so no upgrader storage or `upgrade` method is part of the public surface. A post-deployment defect requires a replacement deployment from the exact recorded source and constructor manifest; this classification does not claim that address or state survives a Studionet reset. The secret-free account, recovery runbook, and minimum live matrix are recorded in `PRE-DEPLOY-READINESS.md`.
+
 Actors and authority remain exactly as approved:
 
 - Primary/secondary: the creator; may create, replace the complete draft base, and freeze it.
@@ -89,4 +93,3 @@ Retrieved on 2026-09-05:
 - https://docs.genlayer.com/developers/decentralized-applications/querying-a-transaction
 - https://docs.genlayer.com/developers/intelligent-contracts/tools/genlayer-studio
 - https://eips.ethereum.org/EIPS/eip-6963
-

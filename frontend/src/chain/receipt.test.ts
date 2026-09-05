@@ -12,6 +12,11 @@ describe('transaction truth checks', () => {
     expect(classifyReceipt({ statusName: TransactionStatus.FINALIZED, consensus_data: { final: false }, txExecutionResult: 1 })).toMatchObject({ ok: false, kind: 'consensus-failed' })
   })
 
+  it('rejects contradictory status and execution representations', () => {
+    expect(classifyReceipt({ statusName: TransactionStatus.FINALIZED, status: TransactionStatus.PROPOSING, txExecutionResultName: ExecutionResult.FINISHED_WITH_RETURN })).toMatchObject({ ok: false, kind: 'inconsistent' })
+    expect(classifyReceipt({ statusName: TransactionStatus.FINALIZED, status: 7, txExecutionResultName: ExecutionResult.FINISHED_WITH_RETURN, txExecutionResult: 2 })).toMatchObject({ ok: false, kind: 'inconsistent' })
+  })
+
   it('accepts only a 32-byte transaction hash', () => {
     expect(isTransactionHash(`0x${'a'.repeat(64)}`)).toBe(true)
     expect(isTransactionHash('0xabc')).toBe(false)

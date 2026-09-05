@@ -1,11 +1,30 @@
-import { normalizeBaseJson, ReadCache } from './contract'
+import { normalizeBaseJson, parseJsonStrict, ReadCache } from './contract'
 import { stableStringify } from '../lib/encoding'
 
 describe('contract read boundary', () => {
   it('canonicalizes base JSON without executing or trusting presentation order', () => {
-    const result = normalizeBaseJson('{"abi":[{"type":"function"}],"requirements":[]}')
-    expect(result.canonical).toBe('{"abi":[{"type":"function"}],"requirements":[]}')
-    expect(result.parsed).toEqual({ abi: [{ type: 'function' }], requirements: [] })
+    const result = normalizeBaseJson('{"abi":[{"inputs":[],"name":"check","outputs":[],"stateMutability":"view","type":"function"}],"requirements":[{"id":"read","polarity":"REQUIRED","text":"Expose a read operation"}]}')
+    expect(result.canonical).toBe('{"abi":[{"inputs":[],"name":"check","outputs":[],"stateMutability":"view","type":"function"}],"requirements":[{"id":"read","polarity":"REQUIRED","text":"Expose a read operation"}]}')
+    expect(result.metrics).toMatchObject({ requirements: 1, abiEntries: 1, functionEntries: 1, parameterNodes: 0, depth: 0 })
+  })
+
+  it('rejects duplicate keys before JSON.parse can collapse them', () => {
+    expect(() => parseJsonStrict('{"requirements":[],"requirements":[],"abi":[]}')).toThrow('DUPLICATE_KEY')
+    expect(() => parseJsonStrict('{"a":1,"nested":{"a":2}}')).not.toThrow()
+  })
+
+  it('enforces the contract ABI grammar and live resource limits', () => {
+    const tuple = { name: 'items', type: 'tuple[][2]', components: [{ name: 'id', type: 'uint' }, { name: 'owner', type: 'address' }] }
+    const result = normalizeBaseJson(JSON.stringify({
+      requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
+      abi: [{ type: 'function', name: 'check', inputs: [tuple], outputs: [], stateMutability: 'view' }],
+    }))
+    expect(result.metrics.parameterNodes).toBe(3)
+    expect(result.metrics.depth).toBe(1)
+    expect(() => normalizeBaseJson(JSON.stringify({
+      requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
+      abi: [{ type: 'function', name: 'check', inputs: [{ name: 'x', type: 'uint256', components: [] }], outputs: [], stateMutability: 'view' }],
+    }))).toThrow('BASE_SPEC_INVALID')
   })
 
   it('deduplicates identical in-flight reads and invalidates safe cache entries', async () => {

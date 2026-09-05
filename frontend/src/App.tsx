@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import {
   ContractGateway,
   normalizeBaseJson,
+  parseJsonStrict,
   type CaseRecord,
 } from './chain/contract'
-import { contractAddress, genlayerChain, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
+import { assertWalletContext, contractAddress, genlayerChain, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
 import { executeContractWrite, reconcileJournalEntry, writeIntent } from './chain/write-coordinator'
 import { JournalError, JournalStore, type JournalEntry } from './persistence/journal'
 import { isRecord, jsonSafe, sha256Hex, stableStringify } from './lib/encoding'
 import { requestAccounts, useWalletProviders } from './wallet/providers'
-import type { WalletOption, WalletSession } from './wallet/types'
+import { isAddress, type WalletOption, type WalletSession } from './wallet/types'
 import './styles.css'
 
 type RequirementDraft = { id: string; text: string; polarity: 'REQUIRED' | 'FORBIDDEN' }
@@ -44,12 +45,6 @@ function shortenAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`
 }
 
-function jsonNodeCount(value: unknown): number {
-  if (Array.isArray(value)) return 1 + (value as unknown[]).reduce<number>((total, item) => total + jsonNodeCount(item), 0)
-  if (isRecord(value)) return 1 + Object.values(value).reduce<number>((total, item) => total + jsonNodeCount(item), 0)
-  return 1
-}
-
 function friendlyError(error: unknown): string {
   if (error instanceof JournalError) {
     if (error.code === 'PENDING_CONFLICT') return 'A matching action is already awaiting confirmation. Refresh the case before trying again.'
@@ -59,9 +54,13 @@ function friendlyError(error: unknown): string {
     return 'Local transaction recovery is unavailable. No action was submitted.'
   }
   if (error instanceof Error) {
-    if (error.message === 'BASE_SPEC_SHAPE' || error.message === 'Unexpected end of JSON input') return 'Enter a valid base specification JSON object.'
+    if (error.message === 'BASE_SPEC_SHAPE' || error.message === 'BASE_SPEC_INVALID' || error.message === 'BAD_JSON' || error.message === 'Unexpected end of JSON input') return 'Enter a valid base specification JSON object.'
+    if (error.message === 'DUPLICATE_KEY') return 'Duplicate JSON keys are not allowed.'
     if (error.message === 'BASE_SPEC_TOO_LARGE') return 'The base specification is too large for this contract.'
+    if (error.message === 'WRONG_NETWORK') return 'Connect the selected wallet to GenLayer Studionet before signing.'
+    if (error.message === 'WALLET_ACCOUNT_CHANGED') return 'The selected wallet account changed. Reconnect it before signing.'
     if (error.message.includes('AUTHORITATIVE_READBACK_MISMATCH')) return 'The transaction finalized, but the expected case state was not visible yet. Refresh and reconcile before retrying.'
+    if (error.message.includes('FAILED_WRITE_POSTSTATE_MISMATCH')) return 'The failed transaction changed a historical revision unexpectedly. Keep the journal blocked and inspect the case.'
     if (error.message.includes('STALE_REVISION')) return 'This case changed on chain. Refresh it before submitting another action.'
     if (error.message.includes('COOLDOWN')) return 'Retry is temporarily unavailable for this case. Wait for the contract cooldown and refresh.'
     if (error.message.includes('BAD_PHASE')) return 'That action is not available in the case’s current phase.'
@@ -101,16 +100,50 @@ async function operationMatches(
     && (method !== 'create_case' || record.create_hash.toLowerCase() === argsHash)
 }
 
-function operationPostcondition(record: CaseRecord, method: string): boolean {
-  if (method === 'replace_base') return record.phase === 'BASE_DRAFT' && !record.base_locked && !record.response_locked
-  if (method === 'freeze_case') return record.phase === 'FROZEN' && record.base_locked && record.response_locked
-  return ['DONE', 'UNRESOLVED', 'EXHAUSTED'].includes(record.phase) && record.accepted_attempts >= 1 && record.response_locked
+function operationPostcondition(record: CaseRecord, method: string, before: CaseRecord): boolean {
+  if (record.revision !== String(BigInt(before.revision) + 1n)) return false
+  if (method === 'replace_base') {
+    return record.phase === 'BASE_DRAFT'
+      && !record.base_locked
+      && !record.response_locked
+      && record.accepted_attempts === before.accepted_attempts
+      && stableStringify(record.response) === stableStringify(before.response)
+      && stableStringify(record.result) === stableStringify(before.result)
+      && record.outcome === before.outcome
+  }
+  if (method === 'freeze_case') {
+    return record.phase === 'FROZEN'
+      && record.base_locked
+      && record.response_locked
+      && stableStringify(record.base) === stableStringify(before.base)
+      && record.accepted_attempts === before.accepted_attempts
+  }
+  if (stableStringify(record.base) !== stableStringify(before.base) || !record.response_locked || record.accepted_attempts !== before.accepted_attempts + 1) return false
+  if (!['DONE', 'UNRESOLVED', 'EXHAUSTED'].includes(record.phase) || typeof record.outcome !== 'string' || !/^[0-9]+$/.test(record.last_accepted_at)) return false
+  if (!isRecord(record.result) || record.result.v !== 1 || !Array.isArray(record.result.labels)) return false
+  const functions = before.base.abi.filter((entry) => entry.type === 'function').length
+  const labels = record.result.labels
+  if (labels.length !== before.base.requirements.length * functions || labels.some((label) => !['IMPLEMENTS', 'VIOLATES', 'NONE', 'UNKNOWN'].includes(String(label)))) return false
+  if (labels.includes('UNKNOWN')) return record.outcome === 'UNRESOLVED' && (record.phase === 'UNRESOLVED' || record.phase === 'EXHAUSTED')
+  let expected = 'CONFORMANT'
+  for (let row = 0; row < before.base.requirements.length; row += 1) {
+    const values = labels.slice(row * functions, (row + 1) * functions)
+    if (before.base.requirements[row].polarity === 'FORBIDDEN' && values.includes('VIOLATES')) expected = 'FORBIDDEN_SURFACE'
+  }
+  if (expected === 'CONFORMANT') {
+    for (let row = 0; row < before.base.requirements.length; row += 1) {
+      const values = labels.slice(row * functions, (row + 1) * functions)
+      if (before.base.requirements[row].polarity === 'REQUIRED' && !values.includes('IMPLEMENTS')) expected = 'MISSING_REQUIRED_SURFACE'
+    }
+  }
+  return record.phase === 'DONE' && record.outcome === expected
 }
 
 async function verifyFailedCaseMutation(gateway: ContractGateway, caseId: string, preRevision: string, preHash: string): Promise<void> {
   const before = await gateway.getVersion(caseId, preRevision)
   if (!before || await caseStateHash(before) !== preHash) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
-  await gateway.getVersion(caseId, String(BigInt(preRevision) + 1n))
+  const after = await gateway.getVersion(caseId, String(BigInt(preRevision) + 1n))
+  if (after !== null) throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
 }
 
 function outcomeCopy(outcome: string): string {
@@ -261,27 +294,23 @@ function CreateCaseForm({
 
   const basePreview = useMemo(() => {
     try {
-      const abi = JSON.parse(abiJson) as unknown
-      if (!Array.isArray(abi)) return { bytes: null, nodes: null, abi: null }
-      const base = { requirements, abi }
-      return {
-        bytes: new TextEncoder().encode(JSON.stringify(base)).length,
-        nodes: jsonNodeCount(base),
-        abi,
-      }
-    } catch {
-      return { bytes: null, nodes: null, abi: null }
+      const abi = parseJsonStrict(abiJson)
+      if (!Array.isArray(abi)) throw new Error('BASE_SPEC_INVALID')
+      const normalized = normalizeBaseJson(JSON.stringify({ requirements, abi }))
+      return { normalized, error: null }
+    } catch (previewError) {
+      return { normalized: null, error: friendlyError(previewError) }
     }
   }, [abiJson, requirements])
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!Array.isArray(basePreview.abi)) {
-      setAbiError('ABI JSON must be an array of normalized V1 entries.')
+    if (!basePreview.normalized) {
+      setAbiError(basePreview.error ?? 'ABI JSON must be a valid normalized V1 base specification.')
       return
     }
     setAbiError(null)
-    onCreate(nonce.trim(), JSON.stringify({ requirements, abi: basePreview.abi }), parent.trim() || '0')
+    onCreate(nonce.trim(), basePreview.normalized.canonical, parent.trim() || '0')
   }
 
   return (
@@ -322,14 +351,15 @@ function CreateCaseForm({
         <span>Normalized V1 ABI JSON</span>
         <textarea value={abiJson} onChange={(event) => { setAbiJson(event.target.value); setAbiError(null) }} rows={17} spellCheck={false} aria-label="Normalized ABI JSON" required />
         <small>Use normalized V1 ABI; remove compiler metadata keys. The contract validates all entries before the case is created.</small>
-        {abiError && <small className="field-error">{abiError}</small>}
+        {(basePreview.error || abiError) && <small className="field-error">{abiError ?? basePreview.error}</small>}
       </label>
       <div className="live-limits" aria-live="polite">
         <span>Live limits</span>
         <strong>{requirements.length}/8 requirements</strong>
-        <strong>{basePreview.abi ? `${basePreview.abi.length}/16 ABI entries` : 'ABI entries: invalid JSON'}</strong>
-        <strong>{basePreview.bytes === null ? '—' : `${basePreview.bytes}/8192 bytes`}</strong>
-        <strong>{basePreview.nodes === null ? '—' : `${basePreview.nodes} JSON nodes`}</strong>
+        <strong>{basePreview.normalized ? `${basePreview.normalized.metrics.abiEntries}/16 ABI entries` : 'ABI entries: invalid JSON'}</strong>
+        <strong>{basePreview.normalized ? `${basePreview.normalized.metrics.bytes}/8192 UTF-8 bytes` : '—'}</strong>
+        <strong>{basePreview.normalized ? `${basePreview.normalized.metrics.parameterNodes}/32 parameter nodes` : '—'}</strong>
+        <strong>{basePreview.normalized ? `${basePreview.normalized.metrics.depth}/4 tuple depth` : '—'}</strong>
       </div>
       <div className="form-actions">
         <button className="primary-button" type="submit" disabled={disabled || busy}>{busy ? 'Preparing…' : 'Create case'}</button>
@@ -420,6 +450,32 @@ export default function App() {
     })()
   }, [journal])
 
+  useEffect(() => {
+    if (!session) return undefined
+    const provider = session.provider
+    const invalidateSession = (message: string) => {
+      setSession(null)
+      setChooserOpen(false)
+      setNotice(null)
+      setError(message)
+    }
+    const onAccountsChanged = (...args: unknown[]) => {
+      const accounts = args[0]
+      const account = Array.isArray(accounts) && typeof accounts[0] === 'string' && isAddress(accounts[0]) ? accounts[0].toLowerCase() : ''
+      if (account !== session.account.toLowerCase()) invalidateSession('The selected wallet account changed. Reconnect before signing.')
+    }
+    const onChainChanged = () => invalidateSession('The selected wallet network changed. Reconnect to GenLayer Studionet before signing.')
+    const onDisconnect = () => invalidateSession('The selected wallet disconnected. Reconnect before signing.')
+    provider.on?.('accountsChanged', onAccountsChanged)
+    provider.on?.('chainChanged', onChainChanged)
+    provider.on?.('disconnect', onDisconnect)
+    return () => {
+      provider.removeListener?.('accountsChanged', onAccountsChanged)
+      provider.removeListener?.('chainChanged', onChainChanged)
+      provider.removeListener?.('disconnect', onDisconnect)
+    }
+  }, [session])
+
   const refreshJournal = useCallback(() => {
     try {
       setJournalEntries(journal.loadAll())
@@ -473,6 +529,7 @@ export default function App() {
     setError(null)
     try {
       const [account] = await requestAccounts(option)
+      await assertWalletContext(option.provider, account)
       setSession({ id: option.id, label: option.label, icon: option.icon, provider: option.provider, account })
       setChooserOpen(false)
       setNotice(`${option.label} is connected for this tab.`)
@@ -488,6 +545,7 @@ export default function App() {
     setError(null)
     setNotice(null)
     try {
+      await assertWalletContext(request.provider, request.account)
       await executeContractWrite(journal, request)
       refreshJournal()
       gateway?.invalidate()
@@ -550,25 +608,27 @@ export default function App() {
           if (args.length !== 2) throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
           operationArgs.push(caseMatch[3])
         }
+        const before = await recoveryGateway.getVersion(caseMatch[2], caseMatch[3])
+        if (!before || await caseStateHash(before) !== entry.pre_hash) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
         const record = await recoveryGateway.getVersion(caseMatch[2], expectedRevision)
-        if (!record || record.id !== caseMatch[2] || record.revision !== expectedRevision || record.primary.toLowerCase() !== entry.account || !operationPostcondition(record, caseMatch[1])) {
+        if (!record || record.id !== caseMatch[2] || record.revision !== expectedRevision || record.primary.toLowerCase() !== entry.account || !operationPostcondition(record, caseMatch[1], before)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
         if (!(await operationMatches(record, caseMatch[1], entry.account, operationArgs))) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
         return record
-      }, undefined, async () => {
+      }, async () => {
         const createMatch = /^create:(0x[0-9a-f]{40}):([0-9a-f]{32})$/.exec(entry.intent)
         if (createMatch) {
           const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2])
-          if (id !== '0') await recoveryGateway.getVersion(id, '1')
+          if (id !== '0') throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
           return
         }
         const caseMatch = /^(?:replace_base|freeze_case|evaluate_case|retry_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
         if (!caseMatch || String(BigInt(caseMatch[2])) !== entry.pre_revision) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
         await verifyFailedCaseMutation(recoveryGateway, caseMatch[1], entry.pre_revision, entry.pre_hash)
-      })
+      }, undefined)
       recoveryGateway.invalidate()
       gateway?.invalidate()
       refreshJournal()
@@ -632,7 +692,7 @@ export default function App() {
         },
         failureReadback: async () => {
           const failedId = await gateway.getIdByNonce(session.account as ContractAddress, nonce)
-          if (failedId !== '0') await gateway.getVersion(failedId, '1')
+          if (failedId !== '0') throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
         },
       }, 'Case created and verified on chain.')
       if (createdId) await loadCase(createdId)
@@ -672,7 +732,7 @@ export default function App() {
       preHash,
       readback: async () => {
         const updated = await gateway.getVersion(selectedCase.id, nextRevision)
-        if (!updated || updated.revision !== nextRevision || updated.primary.toLowerCase() !== session.account.toLowerCase() || !operationPostcondition(updated, method)) {
+        if (!updated || updated.revision !== nextRevision || updated.primary.toLowerCase() !== session.account.toLowerCase() || !operationPostcondition(updated, method, selectedCase)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
         if (!(await operationMatches(updated, method, session.account, operationArgs))) {
