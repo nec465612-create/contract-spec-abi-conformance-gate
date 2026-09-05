@@ -1,6 +1,6 @@
 # PRE_DEPLOY readiness
 
-Status: DRAFT — no Studio signature, deployment, transaction, GitHub push, or Vercel publication has been performed.
+Status: POST_DEPLOY_TEST candidate — exact Studio deployment/E2E is complete; anonymous POST_DEPLOY_TEST review is pending. GitHub/Vercel publication and Vercel E2E have not started.
 
 ## Contract lifecycle classification
 
@@ -17,10 +17,10 @@ This classification is a release decision, not a claim that the contract survive
 | Network | GenLayer Studionet |
 | Chain ID | `61999` |
 | RPC | `https://studio.genlayer.com/api` |
-| Explorer | `https://genlayer-explorer.vercel.app` |
-| Contract address | Not deployed |
-| Deployment transaction | Not submitted |
-| Exact source commit | `a046347c0600cfdc3aeab25e48689dbf4a6f144d` (correction commit; contract/frontend bytes) |
+| Explorer | `https://explorer-studio.genlayer.com/address/0x6de11297EaF221eb95A9E34e5A0e418061789250` |
+| Contract address | `0x6de11297EaF221eb95A9E34e5A0e418061789250` |
+| Deployment transaction | `0x92e04e6f6074d5a4d688ac54ee5374f70a3de1856c9440aa0fdd73fe6f99d094` |
+| Exact source commit | `de66367b459ed421b73bdfb7f3d04bf15088ed38` |
 | Exact source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` (`contracts/main.py`) |
 | Constructor arguments | None (`__init__()` only) |
 | Linked contracts | None |
@@ -28,7 +28,9 @@ This classification is a release decision, not a claim that the contract survive
 | Studio deployer account | `0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902` (selected in the current Studio session; public address only) |
 | Studio role | Deployment/signing account only; no upgrade role |
 
-The manifest must be updated with the contract address and transaction hash after the corresponding gate allows deployment. No private key, seed phrase, token, or credential belongs in this file.
+The deployment manifest is now bound to the exact Studio address and transaction above. This is not a release approval: POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.
+
+The live deployment/readback ledger and the separate Studio/frontend RPC status are in [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and [`docs/RPC-BUDGET.md`](docs/RPC-BUDGET.md).
 
 ## Runtime compatibility decision
 

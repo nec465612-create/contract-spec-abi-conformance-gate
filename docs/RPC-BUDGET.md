@@ -1,8 +1,8 @@
 # RPC budget matrix
 
-Status: PRE_DEPLOY planning artifact. The rows marked `NOT YET MEASURED` are intentionally not live Studio or Vercel evidence. A later gate must replace those cells with measurements from the exact deployed revision/release; this document never turns a plan into an E2E claim.
+Status: POST_DEPLOY_TEST candidate. The original PRE_DEPLOY matrices remain below as historical plan templates. The live Studio evidence is recorded separately and the frontend release evidence is intentionally pending Vercel E2E.
 
-Revision binding: the PRE_DEPLOY package binds this matrix to the exact source commit and file hashes recorded in `PRE-DEPLOY-READINESS.md`. Studio and frontend budgets are separate ledgers. A result in one ledger cannot satisfy the other.
+Revision binding: the live Studio ledger binds to source commit de66367b459ed421b73bdfb7f3d04bf15088ed38, contract source SHA-256 AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45, chain 61999, contract 0x6de11297EaF221eb95A9E34e5A0e418061789250, and account 0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902. Studio and frontend budgets are separate ledgers. A result in one ledger cannot satisfy the other.
 
 ## Shared budget rules
 
@@ -32,6 +32,29 @@ Studio evidence must report actual requests separately from transactions. The pl
 
 ## STUDIO RPC BUDGET EVIDENCE
 
+### Live status
+
+The Studio run produced exactly one deployment and nine unique contract calls, all with retained hashes and Explorer lifecycle confirmation. The transaction count is therefore measured exactly. The Studio UI did not preserve a structured per-operation request ledger that could be exported after the run; the raw UI captures expose automatic sim_fundAccount session/account rows and a later 30 requests per minute rate-limit message, but not a complete historic request count for each receipt, poll, or readback. Those automatic funding rows were not user-triggered actions. Replaying the run to manufacture a count is forbidden by the one-deploy and unique-write rule.
+
+This is an explicit measurement limitation, not a PASS. It is carried into the anonymous POST_DEPLOY_TEST package for independent adjudication. No transaction, funding action, Reset Storage action, duplicate deployment, or duplicate write was performed to fill the gap.
+
+| Exact live row | Planned maximum | Exact measured transaction count | Exact measured readback surface | Actual Studio RPC request count | Status / variance |
+|---|---:|---:|---|---|---|
+| S0–S1 preflight | 7 reads, 0 tx | 0 | Exact source selected; chain 61999; account and schema context checked | Not reconstructable from the retained Studio UI log | Measurement gap; no replay permitted |
+| Deploy | 6 reads + 1 tx | 1 | Terminal deployment receipt and Explorer contract address | Not reconstructable from the retained Studio UI log | Measurement gap; deploy hash retained |
+| S1 create_case case 1 | 6 reads + 1 tx | 1 | Case 1 revision 1 and exact creator/base readback | Not reconstructable from the retained Studio UI log | Measurement gap; unique nonce |
+| S2 replace_base case 1 | 5 reads + 1 tx | 1 | Current revision 2 plus historical revision 1 | Not reconstructable from the retained Studio UI log | Measurement gap; no replay |
+| S3 freeze_case case 1 | 5 reads + 1 tx | 1 | Current revision 3 plus historical revision 2 | Not reconstructable from the retained Studio UI log | Measurement gap; no replay |
+| S4 evaluate_case case 1 | 5 reads + 1 tx | 1 | Revision 4, DONE, CONFORMANT, result IMPLEMENTS | Not reconstructable from the retained Studio UI log | Measurement gap; semantic result retained |
+| S5 stale negative | 5 reads + 1 tx | 1 | USER_ERROR STALE_REVISION and unchanged revision 4 | Not reconstructable from the retained Studio UI log | Measurement gap; finalized error is intentional |
+| S6 create/freeze/evaluate/retry case 2 | Four row-specific budgets, 4 tx | 4 | Revisions 1, 2, 3, and 4; UNKNOWN attempt count 1 to 2 | Not reconstructable from the retained Studio UI log | Measurement gap; one retry after 60-second cooldown |
+| S7 read-only reconciliation | 1 receipt + 2 readbacks planned | 0 | get_case(1), get_count(), get_version(1,1), with Finalized selector | Not reconstructable from the retained Studio UI log | Read-only evidence exact; request total unavailable |
+
+The recovery tab hit the observed 30 requests per minute Studio limit. Per the governing rule, retries stopped, the hash/state was preserved, cooldown was honored, and Explorer was used read-only for corroboration. The frontend ledger below remains independent and has not been substituted by this Studio result.
+
+### PRE_DEPLOY template (historical)
+
+
 Required for the Studio deploy/E2E gate. Replace `NOT YET MEASURED` only during the exact-revision live run.
 
 | Exact revision / network / account | Operation | RPC method or Studio action | Trigger | Planned maximum | Actual count | Interval / attempts | Transaction hash | Retry-After / cooldown observed | Terminal condition | Receipt calls | Readback calls | Transaction count | Variance / explanation |
@@ -58,6 +81,12 @@ Scope: the released browser frontend. Counts below are per explicit user action 
 The six-operation write budget is the normal logical budget from the governing frontend rule: one submission, three bounded finality queries, and at most two readbacks. Transient retry attempts are not free; they are counted in measured evidence, honor Retry-After, and terminate the journey before a duplicate write can occur.
 
 ## FRONTEND RPC BUDGET EVIDENCE
+
+### Current status
+
+No public release or Vercel browser run exists yet. Actual frontend RPC/provider counts are therefore NOT RUN BY DESIGN, not zero and not a pass. The source-level controls and regression tests are complete: one shared read client, FIFO read queue, cache and single-flight behavior, bounded 2/4/8-second finality checks, three-attempt transient retry budget, Retry-After handling, two-readback write budget, journal reconciliation, and no automatic landing-page chain read. The F0–F7 frontend matrix below remains the required measurement plan for Vercel E2E.
+
+### PRE_DEPLOY evidence template (not run)
 
 Required for the exact final release and Vercel E2E gate. The current PRE_DEPLOY package has no public release or live measurement, so these rows remain explicitly unmeasured.
 

@@ -55,7 +55,7 @@ describe('transaction progress', () => {
   })
 
   it('renders only the verified Explorer URL supplied by the parent', () => {
-    const explorerUrl = `https://genlayer-explorer.vercel.app/transactions/${hash}`
+    const explorerUrl = `https://explorer-studio.genlayer.com/tx/${hash}`
     render(<TransactionProgress progress={{ phase: 'SUBMITTED', hash }} explorerUrl={explorerUrl} />)
     expect(screen.getByRole('link', { name: 'View transaction' })).toHaveAttribute('href', explorerUrl)
     expect(screen.getByRole('link', { name: 'View transaction' })).toHaveAttribute('target', '_blank')
