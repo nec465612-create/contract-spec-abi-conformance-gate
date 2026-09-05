@@ -15,6 +15,8 @@ const EXPECTED_SOURCE_COMMIT = 'cd833b78b43e22661ade6a4dddad3fc4269eb07a'
 const EXPECTED_SOURCE_SHA256 = 'E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F'
 const RESUME_MANIFEST_PATH = resolve(ROOT, 'docs/evidence/studio-rpc-recovery-manifest.json')
 const RUN_CONFIRM = 'CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN'
+const STUDIO_PRIVATE_KEY_ENV = 'CONTRACT_SPEC_ABI_GATE_STUDIO_PRIVATE_KEY'
+const configuredPrivateKey = process.env[STUDIO_PRIVATE_KEY_ENV] ?? null
 const STATUS_SCHEDULE_SECONDS = [10, 20, 40, 80]
 const MAX_STATUS_CHECKS = STATUS_SCHEDULE_SECONDS.length
 const REQUEST_TIMEOUT_MS = 30_000
@@ -124,6 +126,9 @@ try {
   }
   if (requestedEndpoint && requestedEndpoint !== EXACT_STUDIO_RPC_ENDPOINT) {
     throw new Error(`STUDIO_RPC_ENDPOINT must equal ${EXACT_STUDIO_RPC_ENDPOINT}; refusing redirected RPC.`)
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(configuredPrivateKey ?? '')) {
+    throw new Error(`${STUDIO_PRIVATE_KEY_ENV} must provide the selected disposable signer key; refusing an unbound account.`)
   }
   source = await readFile(SOURCE_PATH, 'utf8')
   sourceSha256 = createHash('sha256').update(source).digest('hex').toUpperCase()
@@ -473,7 +478,7 @@ function installOneShotSubmissionGuard(client) {
   }
 }
 
-const account = createAccount()
+const account = createAccount(configuredPrivateKey)
 const client = createClient({ chain: studionet, endpoint: ENDPOINT, account })
 installOneShotSubmissionGuard(client)
 const nonce1 = 'c0f03716fea36fa4643b82f9bde0faf0'

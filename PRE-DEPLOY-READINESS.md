@@ -25,7 +25,7 @@ This classification is a release decision, not a claim that the contract survive
 | Constructor arguments | None (`__init__()` only) |
 | Linked contracts | None |
 | Upgrade authority | None by intentional-freeze design |
-| Studio deployer account | To be selected and recorded read-only before the fresh PRE_DEPLOY package is locked |
+| Studio deployer account | `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (offline-selected disposable signer; public address only) |
 | Studio role | Deployment/signing account only; no upgrade role |
 
 The prior addresses and transactions remain historical evidence for superseded source bytes only. This draft does not authorize deployment: POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.

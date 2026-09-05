@@ -15,7 +15,8 @@ Evidence date: 2026-09-06 (Asia/Saigon)
 | Adapted live manifest | None |
 | Adapted public ABI | 10 methods: 7 views and 3 writes |
 | Adapted deterministic terminal path | `freeze_case`: revision `3`, `DONE`, exact-signature result |
-| Local evidence | Direct Mode `13 passed`; frontend `42 passed`; frontend production build PASS; runner static check pending final binding |
+| Adapted Studio account | `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (deployment/signing role; selected offline, no transaction) |
+| Local evidence | Direct Mode `13 passed`; frontend `42 passed`; frontend production build PASS; runner `node --check` PASS; wrong-endpoint fail-closed check PASS with zero requests |
 | Release boundary | No Studio RPC, GitHub/Vercel publication, or Vercel E2E has occurred |
 
 The adapted source requires a fresh exact-revision anonymous `PRE_DEPLOY` decision. Studio and frontend RPC ledgers remain separate; the current adapted runner is a proof artifact only until that decision exists.
@@ -63,7 +64,9 @@ A fresh bounded read-only health sample is preserved in [studio-platform-health-
 
 The deployed Studio source was the exact reviewed contract source, including its first-line runtime dependency declaration. No private key, seed phrase, wallet credential, or token is recorded here.
 
-## Local verification retained from the exact source revision
+## Historical superseded-source local verification
+
+The following verification block is bound to the historical source commit `de66367b459ed421b73bdfb7f3d04bf15088ed38` and is not current adapted-source evidence.
 
 - Contract tests: 15 passed with py -3.13 -m pytest probes/test_runtime_probe.py tests/test_contract.py -q -p no:cacheprovider.
 - GenVM lint: passed with PYTHONIOENCODING=utf-8 genvm-lint check contracts/main.py.
