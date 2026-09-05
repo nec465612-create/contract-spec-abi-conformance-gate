@@ -22,6 +22,8 @@ Evidence date: 2026-09-05 (Asia/Saigon)
 
 The accepted owner-bound case creator key was not retained, so the current deployment is not resumed. The finalized evaluation timeout is preserved as a failed live case with unchanged authoritative state; no evaluation retry was submitted. Studio and frontend RPC ledgers remain separate.
 
+A single later read-only status diagnostic is preserved in [studio-rpc-status-diagnostic-1788612789642.json](evidence/studio-rpc-status-diagnostic-1788612789642.json). The endpoint returned an RPC parameter error; no alternate payload or state-changing request was attempted. This diagnostic does not override the existing full/sparse authoritative evidence or claim validator readiness.
+
 ## Historical frozen UI binding (not current measured run)
 
 | Field | Value |

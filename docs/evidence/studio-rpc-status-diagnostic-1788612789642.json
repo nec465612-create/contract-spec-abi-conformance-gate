@@ -1,0 +1,26 @@
+{
+  "status": "DIAGNOSTIC_ERROR",
+  "kind": "READ_ONLY_PLATFORM_STATUS_DIAGNOSTIC",
+  "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
+  "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
+  "chainId": 61999,
+  "endpoint": "https://studio.genlayer.com/api",
+  "transactionHash": "0x64c5797c62daf1ecf76c3b53d4a604ada4b52464920ccfaac125955fe80a5fca",
+  "requestSequence": 1,
+  "requests": [
+    {
+      "operation": "status-diagnostic",
+      "method": "gen_getTransactionStatus",
+      "httpStatus": 200,
+      "rpcError": {
+        "code": -32603,
+        "message": "Server could not adapt the object-shaped txId parameter."
+      }
+    }
+  ],
+  "transactionCount": 0,
+  "stateChangingRequests": 0,
+  "usedForReleaseAuthorization": false,
+  "note": "One read-only lightweight status diagnostic was attempted after the already-final sparse evidence. The endpoint returned a server parameter error; no alternate payload was retried, and this diagnostic is not part of the measured S0-S12 run ledger. Existing full and sparse authoritative evidence remains the release source of truth.",
+  "generatedAt": "2026-09-05T12:53:09.642Z"
+}
