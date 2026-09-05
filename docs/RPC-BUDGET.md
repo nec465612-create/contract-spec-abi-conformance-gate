@@ -1,6 +1,6 @@
 # RPC budget matrix
 
-Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. The locked S0–S7 Studio matrix has one retained adapted run through S3; continuation is review-gated and must not replay deployment/create. Frontend release evidence remains intentionally pending Vercel E2E.
+Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. The locked S0–S7 Studio matrix has one retained adapted run through S6 with five finalized transactions; only the bounded S7 read-only reconciliation remains. No deployment/create/write replay is permitted. Frontend release evidence remains intentionally pending Vercel E2E.
 
 Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`, implementation commit `cd833b78b43e22661ade6a4dddad3fc4269eb07a`, exact package HEAD is the value of `git rev-parse HEAD` at review time (self-binding; stale literal hashes are intentionally not used). Current runner identity is the SHA-256 of `probes/studio_rpc_run.mjs` at review time. Selected disposable Studio signer: `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (public address only). Adapted deployment address is `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D`; no deployment/create replay is permitted. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
 
@@ -15,11 +15,11 @@ STUDIO_E2E_STARTED_AT: 2026-09-05T20:17:30.019Z
 STUDIO_CAPABILITY_TOOL_OR_API: probes/studio_rpc_run.mjs global fetch instrumentation and operation ledger
 STUDIO_CAPABILITY_CHECK: node --check probes/studio_rpc_run.mjs plus static verification of global rpcRequests, requestSequence, operation ownership, per-row caps, immediate transaction retention and one-shot submission guard
 STUDIO_CAPABILITY_RESULT: every runner-visible Studio JSON-RPC action is assigned to one S0-S7 row; physical transport requests outside the instrument are not claimed
-STUDIO_PHYSICAL_COUNT_SOURCE: docs/evidence/studio-rpc-run-1788639450020.json
+STUDIO_PHYSICAL_COUNT_SOURCE: docs/evidence/studio-rpc-run-1788641657001.json
 STUDIO_PHYSICAL_COUNT_CLAIM: OBSERVABLE_LEDGER_ONLY
 STUDIO_REPLAY_FOR_MEASUREMENT: NO
 
-The mode was locked before the adapted-source Studio action. The retained run preserves every runner-visible request event, row count, transaction hash, bounded status check, terminal receipt and readback boundary. It made 21 observable requests and retained two hashes; S0–S3 are within cap and all events are operation-scoped. The runner stopped at S3 only because its earlier execution classifier treated quorum-idle receipts as an execution failure. A separate read-only reconciliation confirms create accepted and state is `id=1`, `count=1`, revision `1`, `BASE_DRAFT`. The current continuation path reclassifies only that retained operation and begins at S4; it cannot replay deployment/create.
+The mode was locked before the adapted-source Studio action. The retained run preserves every runner-visible request event, row count, transaction hash, bounded status check and terminal receipt. It made 49 observable requests and retained five hashes; S0–S6 are within cap and all events are operation-scoped. S4 replace and S5 freeze finalized with successful authoritative readbacks. S6 finalized as a consensus-agreed execution error whose leader receipt carries structured `rollback` / `STALE_REVISION`; the previous runner stopped before its unchanged-state readback because it required a literal `USER_ERROR` label. The current correction recognizes this explicit structured execution-error shape and adds a read-only S7-only reconciliation mode; it cannot replay any write.
 
 ## Historical Studio RPC measurement capability classification
 
@@ -72,7 +72,7 @@ Scope: the measured disposable Studionet runner and the Studio deployment workfl
 | S3-create-case1 | Create case 1 | SDK submission envelope, four bounded finality checks, `get_id_by_nonce`, `get_case` | 14 | One unique nonce; one-shot submission fuse; no resubmit | 1 | Stop when terminal receipt and both readbacks agree |
 | S4-replace-case1 | Replace case 1 base | SDK submission envelope, four bounded finality checks, `get_case`, `get_version` | 14 | One unique operation; no resubmit | 1 | Stop on final success/error or reconciliation-required |
 | S5-freeze-case1 | Freeze and deterministically evaluate case 1 | SDK submission envelope, four bounded finality checks, `get_case`, `get_version` | 14 | One unique operation; no resubmit | 1 | Stop only after DONE/CONFORMANT/exact-label readback or terminal error |
-| S6-stale-negative | Submit one stale-revision negative control | SDK submission envelope, four bounded finality checks, unchanged-state `get_case` | 13 | Require finalized execution error plus `USER_ERROR STALE_REVISION`; no resubmit | 1 | Stop if error classification or unchanged-state proof is absent |
+| S6-stale-negative | Submit one stale-revision negative control | SDK submission envelope, four bounded finality checks, unchanged-state `get_case` | 13 | Require finalized execution error plus structured `rollback` / `STALE_REVISION` (or documented `USER_ERROR` form); no resubmit | 1 | Stop if error classification or unchanged-state proof is absent |
 | S7-reconciliation | Reconcile the retained freeze hash | One receipt lookup, `get_case`, `get_count`, `get_version` | 4 | One explicit read-only pass; no parallel reconciliation | 0 | Stop after all three authoritative readbacks |
 
 The SDK submission envelope is included in each write cap: nonce lookup, gas estimate, gas-price lookup, one raw submission, and its transport receipt check. The one-shot guard disables ABI-mismatch fallback and the transport fuse blocks any second `eth_sendTransaction`/`eth_sendRawTransaction`. Every request is recorded in the global `rpcRequests` list and in exactly one operation; `requestSequence` must equal the sum of all operation counts. Actual requests and transactions are reported separately.
@@ -91,7 +91,7 @@ STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node p
 
 ### Current adapted partial ledger
 
-The exact adapted run is preserved locally in `docs/evidence/studio-rpc-run-1788639450020.json` (SHA-256 `CD5084333797668CA3C13852B51E859111E0C2E264B806A6A1544116FBA68C7C`) and the separate read-only reconciliation in `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (SHA-256 `A785FEE34E60495EB96B24589942195CC3184B1F18FA2DCA5C38C592DB1068B6`). The deployment finalized at `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5`; the create finalized at `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9`. The run has `requestSequence=21`, `transactionCount=2`, and status `BLOCKED` only because of the corrected MAJORITY_AGREE/idle-receipt classification. No later write has been made.
+The initial retained boundary is preserved in `docs/evidence/studio-rpc-run-1788639450020.json` (SHA-256 `CD5084333797668CA3C13852B51E859111E0C2E264B806A6A1544116FBA68C7C`) and the separate pre-continuation read-only reconciliation in `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (SHA-256 `A785FEE34E60495EB96B24589942195CC3184B1F18FA2DCA5C38C592DB1068B6`). The current retained continuation ledger is `docs/evidence/studio-rpc-run-1788641657001.json` (SHA-256 `C516A0E3F178AA99B5E936DFDA5F6729C23E0D6F3592E9CDF358BA79055187FA`). It has `requestSequence=49`, `transactionCount=5`, and status `BLOCKED` only because S6's structured execution-error receipt was not yet recognized by the runner; no duplicate write occurred.
 
 | Operation | Planned maximum | Actual RPC count | Transaction hash | Terminal evidence |
 |---|---:|---:|---|---|
@@ -100,9 +100,12 @@ The exact adapted run is preserved locally in `docs/evidence/studio-rpc-run-1788
 | S1-schema | 1 | 1 | n/a | PASS |
 | S2-deploy | 13 | 9 | `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5` | FINALIZED; source readback passed |
 | S3-create-case1 | 14 | 8 | `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9` | FINALIZED MAJORITY_AGREE; read-only state reconciliation passed |
-| **Total** | — | **21** | **2 retained hashes** | **BLOCKED_PARTIAL; continuation review required** |
+| S4-replace-case1 | 14 | 10 | `0x1d119d3b7391b01f7e16c6c884e03945e557d92e49164ff9a1acf649e7d81a36` | FINALIZED MAJORITY_AGREE; current/history readbacks passed |
+| S5-freeze-case1 | 14 | 10 | `0xab999a2188b7e1f99adaea235fd771016164e12652619f7620d705662c8d0b5b` | FINALIZED MAJORITY_AGREE; DONE/CONFORMANT/IMPLEMENTS readbacks passed |
+| S6-stale-negative | 13 | 8 | `0xf8402587e60ae09f09331ed9770e5d6c1cea5653d15ae3149ad132b4a392e4b5` | FINALIZED MAJORITY_AGREE; execution ERROR with structured rollback `STALE_REVISION`; post-state readback deferred to S7 |
+| **Total** | — | **49** | **5 retained hashes** | **BLOCKED_PARTIAL; S7 read-only reconciliation review-gated** |
 
-The read-only reconciliation is [studio-adapted-partial-reconciliation-1788639450020.json](evidence/studio-adapted-partial-reconciliation-1788639450020.json). The continuation command, when separately approved, must use the retained evidence paths and `STUDIO_PARTIAL_RESUME=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN`; it starts at S4 and never resubmits S2/S3.
+The initial read-only boundary is [studio-adapted-partial-reconciliation-1788639450020.json](evidence/studio-adapted-partial-reconciliation-1788639450020.json). The S7-only continuation command, after targeted review of the classifier correction, must use `STUDIO_FINAL_RECONCILE=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN STUDIO_FINAL_EVIDENCE_PATH=studio-rpc-run-1788641657001.json`; it performs no write and never replays S2–S6.
 
 ## Historical superseded-source runs (not current adapted source)
 

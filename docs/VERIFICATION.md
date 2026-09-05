@@ -1,6 +1,6 @@
 # Live verification
 
-Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The deterministic-freeze adaptation has a finalized disposable deployment and create transaction with retained observable Studio evidence; the continuation is review-gated after a classifier-only correction. No GitHub/Vercel publication or Vercel E2E has occurred.
+Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The deterministic-freeze adaptation has five finalized disposable transactions with retained observable Studio evidence; S6 is a structured finalized stale-revision execution error and only S7 read-only reconciliation remains review-gated. No GitHub/Vercel publication or Vercel E2E has occurred.
 
 Evidence date: 2026-09-06 (Asia/Saigon)
 
@@ -14,15 +14,18 @@ Evidence date: 2026-09-06 (Asia/Saigon)
 | Adapted Studio deployment | `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D` |
 | Adapted deployment hash | `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5` (FINALIZED) |
 | Adapted create hash | `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9` (FINALIZED, MAJORITY_AGREE) |
-| Adapted live evidence | `docs/evidence/studio-rpc-run-1788639450020.json` (`BLOCKED_PARTIAL`, 21 requests, 2 hashes) |
-| Adapted read-only reconciliation | `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (`PASS`, id 1/count 1/revision 1/BASE_DRAFT) |
+| Adapted live evidence | `docs/evidence/studio-rpc-run-1788641657001.json` (`BLOCKED_PARTIAL`, 49 requests, 5 hashes; SHA-256 `C516A0E3F178AA99B5E936DFDA5F6729C23E0D6F3592E9CDF358BA79055187FA`) |
+| Adapted initial read-only boundary | `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (`PASS`, pre-continuation id 1/count 1/revision 1/BASE_DRAFT) |
+| Adapted S4 replace hash | `0x1d119d3b7391b01f7e16c6c884e03945e557d92e49164ff9a1acf649e7d81a36` (FINALIZED) |
+| Adapted S5 freeze hash | `0xab999a2188b7e1f99adaea235fd771016164e12652619f7620d705662c8d0b5b` (FINALIZED, DONE/CONFORMANT/IMPLEMENTS readbacks) |
+| Adapted S6 stale hash | `0xf8402587e60ae09f09331ed9770e5d6c1cea5653d15ae3149ad132b4a392e4b5` (FINALIZED, execution ERROR, structured rollback STALE_REVISION) |
 | Adapted public ABI | 10 methods: 7 views and 3 writes |
 | Adapted deterministic terminal path | `freeze_case`: revision `3`, `DONE`, exact-signature result |
 | Adapted Studio account | `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (deployment/signing role) |
 | Local evidence | Direct Mode `13 passed`; frontend `42 passed`; frontend production build PASS; runner `node --check` PASS; wrong-endpoint fail-closed check PASS with zero requests |
-| Release boundary | No continuation write, GitHub/Vercel publication, or Vercel E2E has occurred; PRE_DEPLOY continuation review is pending |
+| Release boundary | No further write/retry, GitHub/Vercel publication, or Vercel E2E has occurred; S7 read-only continuation review is pending |
 
-The first adapted run was authorized by the prior exact-revision PRE_DEPLOY approval. Its S3 status was blocked by an execution-result classifier defect, not by a failed contract receipt; the retained read-only reconciliation confirms the accepted state. The classifier/continuation delta at the current HEAD requires a targeted exact-revision reviewer decision before S4–S7 writes. Studio and frontend RPC ledgers remain separate.
+The first adapted run was authorized by the prior exact-revision PRE_DEPLOY approval. The approved continuation finalized S4 replace, S5 freeze and S6 stale-negative exactly once. S6's receipt is finalized, consensus-agreed, execution ERROR with leader `rollback` payload `STALE_REVISION`; the runner stopped before S7 because it required a literal `USER_ERROR` string. The current correction recognizes the structured error and adds a read-only S7-only path, so no write replay is allowed. Studio and frontend RPC ledgers remain separate.
 
 ## Historical superseded-source recovery (not current adapted source)
 

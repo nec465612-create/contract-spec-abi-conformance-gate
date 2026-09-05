@@ -29,6 +29,10 @@ const RETAINED_PARTIAL_READBACK = Object.freeze({
   file: 'studio-adapted-partial-reconciliation-1788639450020.json',
   sha256: 'A785FEE34E60495EB96B24589942195CC3184B1F18FA2DCA5C38C592DB1068B6',
 })
+const RETAINED_FINAL_EVIDENCE = Object.freeze({
+  file: 'studio-rpc-run-1788641657001.json',
+  sha256: 'C516A0E3F178AA99B5E936DFDA5F6729C23E0D6F3592E9CDF358BA79055187FA',
+})
 const OPERATION_REQUEST_CAPS = Object.freeze({
   'S0-funding': 1,
   'S0-preflight': 2,
@@ -55,12 +59,16 @@ const requestedRestart = process.env.STUDIO_RESTART_PARTIAL_RUN ?? null
 const requestedPartialResume = process.env.STUDIO_PARTIAL_RESUME ?? null
 const requestedPartialEvidencePath = process.env.STUDIO_PARTIAL_EVIDENCE_PATH ?? null
 const requestedPartialReadbackPath = process.env.STUDIO_PARTIAL_READBACK_PATH ?? null
+const requestedFinalReconcile = process.env.STUDIO_FINAL_RECONCILE ?? null
+const requestedFinalEvidencePath = process.env.STUDIO_FINAL_EVIDENCE_PATH ?? null
 const RESUME_MODE = Boolean(requestedResumeHash || requestedResumeAddress)
 const RESTART_MODE = Boolean(requestedRestart)
 const PARTIAL_RESUME_MODE = Boolean(requestedPartialResume || requestedPartialEvidencePath || requestedPartialReadbackPath)
+const FINAL_RECONCILE_MODE = Boolean(requestedFinalReconcile || requestedFinalEvidencePath)
 let resumeEvidenceSummary = null
 let partialEvidence = null
 let partialReadbackEvidence = null
+let finalEvidence = null
 let approvedResumeHash = null
 let approvedResumeAddress = null
 let approvedDeploymentAccount = null
@@ -152,6 +160,7 @@ function blockedEvidence(error, accountAddress = null) {
     resumeMode: RESUME_MODE,
     restartMode: RESTART_MODE,
     partialResumeMode: PARTIAL_RESUME_MODE,
+    finalReconcileMode: FINAL_RECONCILE_MODE,
     resumeEvidence: resumeEvidenceSummary,
     error: { message: String(error), code: error?.code ?? null },
     generatedAt: new Date().toISOString(),
@@ -188,6 +197,9 @@ try {
   if (PARTIAL_RESUME_MODE && (RESUME_MODE || RESTART_MODE)) {
     throw new Error('Partial continuation cannot be combined with resume or replacement restart mode.')
   }
+  if (FINAL_RECONCILE_MODE && (RESUME_MODE || RESTART_MODE || PARTIAL_RESUME_MODE)) {
+    throw new Error('Final reconciliation cannot be combined with resume, replacement restart, or write continuation mode.')
+  }
   if (RESTART_MODE && requestedRestart !== RUN_CONFIRM) {
     throw new Error(`Set STUDIO_RESTART_PARTIAL_RUN=${RUN_CONFIRM} to authorize a replacement disposable run.`)
   }
@@ -196,6 +208,12 @@ try {
   }
   if (PARTIAL_RESUME_MODE && (!requestedPartialEvidencePath || !requestedPartialReadbackPath)) {
     throw new Error('Partial continuation requires both STUDIO_PARTIAL_EVIDENCE_PATH and STUDIO_PARTIAL_READBACK_PATH.')
+  }
+  if (FINAL_RECONCILE_MODE && requestedFinalReconcile !== RUN_CONFIRM) {
+    throw new Error(`Set STUDIO_FINAL_RECONCILE=${RUN_CONFIRM} to authorize read-only reconciliation from retained final evidence.`)
+  }
+  if (FINAL_RECONCILE_MODE && !requestedFinalEvidencePath) {
+    throw new Error('Final reconciliation requires STUDIO_FINAL_EVIDENCE_PATH.')
   }
   if (!RESUME_MODE && !RESTART_MODE) {
     try {
@@ -285,6 +303,60 @@ try {
       priorTransactionCount: prior.transactionCount,
       reclassifiedOperation: 'S3-create-case1',
       reclassification: 'FINALIZED_MAJORITY_AGREE_READBACK_CONFIRMED',
+    }
+  }
+  if (FINAL_RECONCILE_MODE) {
+    const finalEvidenceFile = resolveEvidencePath(requestedFinalEvidencePath, 'STUDIO_FINAL_EVIDENCE_PATH', RETAINED_FINAL_EVIDENCE)
+    const prior = await readRetainedEvidence(finalEvidenceFile, 'STUDIO_FINAL_EVIDENCE_PATH', RETAINED_FINAL_EVIDENCE)
+    const expectedOperations = ['S0-funding', 'S0-preflight', 'S1-schema', 'S2-deploy', 'S3-create-case1', 'S4-replace-case1', 'S5-freeze-case1', 'S6-stale-negative']
+    const expectedTransactions = ['S2-deploy', 'S3-create-case1', 'S4-replace-case1', 'S5-freeze-case1', 'S6-stale-negative']
+    const priorOperations = prior.operations?.map((item) => item.id)
+    const priorTransactions = prior.transactions?.map((item) => item.id)
+    const deploymentRow = prior.transactions?.find((item) => item.id === 'S2-deploy')
+    const createRow = prior.transactions?.find((item) => item.id === 'S3-create-case1')
+    const replaceRow = prior.transactions?.find((item) => item.id === 'S4-replace-case1')
+    const freezeRow = prior.transactions?.find((item) => item.id === 'S5-freeze-case1')
+    const staleRow = prior.transactions?.find((item) => item.id === 'S6-stale-negative')
+    const expectedAccount = createAccount(configuredPrivateKey).address
+    if (
+      prior.status !== 'BLOCKED' ||
+      !sourceBindingMatches({ sourceCommit: prior.exactSourceCommit, sourceSha256: prior.sourceSha256 }) ||
+      prior.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
+      prior.account?.toLowerCase() !== expectedAccount.toLowerCase() ||
+      prior.chainId !== 61999 ||
+      !/^0x[0-9a-fA-F]{40}$/.test(prior.contractAddress ?? '') ||
+      JSON.stringify(priorOperations) !== JSON.stringify(expectedOperations) ||
+      JSON.stringify(priorTransactions) !== JSON.stringify(expectedTransactions) ||
+      prior.requestSequence !== prior.rpcRequests?.length ||
+      prior.requestSequence !== prior.operations?.reduce((total, item) => total + item.requestCount, 0) ||
+      !prior.rpcRequests?.every((event) => event.operation && event.operation !== 'unscoped') ||
+      !prior.operations?.every((item) => item.requestCount <= OPERATION_REQUEST_CAPS[item.id] && item.budgetWithinCap && item.allEventsRetained) ||
+      prior.transactionCount !== 5 ||
+      prior.transactionCount !== prior.transactions?.length ||
+      !deploymentRow || !createRow || !replaceRow || !freezeRow || !staleRow ||
+      !prior.transactions.every((item) => /^0x[0-9a-fA-F]{64}$/.test(item.hash ?? '') && isFinalized(item.transaction)) ||
+      deploymentRow.deployedSha256?.toLowerCase() !== EXPECTED_SOURCE_SHA256.toLowerCase() ||
+      deploymentRow.address?.toLowerCase() !== prior.contractAddress.toLowerCase() ||
+      deploymentRow.deploymentAccount?.toLowerCase() !== expectedAccount.toLowerCase() ||
+      deploymentRow.transaction?.from_address?.toLowerCase() !== expectedAccount.toLowerCase() ||
+      !isExecutionSuccess(createRow.transaction) ||
+      !isExecutionSuccess(replaceRow.transaction) ||
+      !isExecutionSuccess(freezeRow.transaction) ||
+      !isExecutionError(staleRow.transaction) ||
+      !hasExpectedStaleError(staleRow.transaction) ||
+      prior.operations.find((item) => item.id === 'S6-stale-negative')?.status !== 'ERROR'
+    ) {
+      throw new Error('Retained final evidence is not an exact current-source read-only reconciliation boundary.')
+    }
+    finalEvidence = prior
+    contractAddress = prior.contractAddress
+    resumeEvidenceSummary = {
+      mode: 'final-read-only-reconciliation',
+      priorEvidenceFile: `docs/evidence/${requestedFinalEvidencePath}`,
+      priorRequestSequence: prior.requestSequence,
+      priorTransactionCount: prior.transactionCount,
+      retainedWriteOperations: ['S2-deploy', 'S3-create-case1', 'S4-replace-case1', 'S5-freeze-case1', 'S6-stale-negative'],
+      nextOperation: 'S7-reconciliation',
     }
   }
   if (RESUME_MODE || RESTART_MODE) {
@@ -546,8 +618,17 @@ function isExecutionError(transaction) {
 }
 
 function hasExpectedStaleError(transaction) {
+  if (!isFinalized(transaction) || !isExecutionError(transaction)) return false
+  const receipts = [
+    ...(transaction?.consensus_data?.leader_receipt ?? []),
+    ...(transaction?.consensus_data?.validators ?? []),
+  ]
+  const structuredRollback = receipts.some((receipt) =>
+    String(receipt?.result?.status ?? '').toLowerCase() === 'rollback' &&
+    String(receipt?.result?.payload ?? '').toUpperCase() === 'STALE_REVISION',
+  )
   const serialized = JSON.stringify(jsonSafe(transaction)).toUpperCase()
-  return serialized.includes('USER_ERROR') && serialized.includes('STALE_REVISION')
+  return structuredRollback || (serialized.includes('USER_ERROR') && serialized.includes('STALE_REVISION'))
 }
 
 function waitBounded(milliseconds) {
@@ -616,7 +697,35 @@ installOneShotSubmissionGuard(client)
 const nonce1 = 'c0f03716fea36fa4643b82f9bde0faf0'
 
 try {
-  if (PARTIAL_RESUME_MODE) {
+  let reconciliation = null
+  if (FINAL_RECONCILE_MODE) {
+    operations.push(...finalEvidence.operations.map((item) => jsonSafe(item)))
+    allEvents.push(...finalEvidence.rpcRequests.map((item) => jsonSafe(item)))
+    requestSequence = finalEvidence.requestSequence
+    txs.push(...finalEvidence.transactions.map((item) => jsonSafe(item)))
+    contractAddress = finalEvidence.contractAddress
+    const staleOperation = operations.find((item) => item.id === 'S6-stale-negative')
+    const staleTransaction = txs.find((item) => item.id === 'S6-stale-negative')
+    staleOperation.status = 'PASS'
+    delete staleOperation.error
+    staleOperation.result = {
+      hash: staleTransaction.hash,
+      transaction: staleTransaction.transaction,
+      expectedError: 'FINALIZED EXECUTION_ERROR STALE_REVISION',
+      reclassifiedFrom: 'BLOCKED_STALE_ERROR_SHAPE',
+    }
+    staleOperation.reclassification = 'FINALIZED_STRUCTURED_ROLLBACK_STALE_REVISION'
+    const retainedFreezeHash = txs.find((item) => item.id === 'S5-freeze-case1').hash
+    reconciliation = await operation('S7-reconciliation', 'one explicit retained-hash receipt lookup and three authoritative readbacks', async () => {
+      const receipt = await client.getTransaction({ hash: retainedFreezeHash })
+      const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
+      const count = await readContract(client, contractAddress, 'get_count', [])
+      const historical = parseCase(await readContract(client, contractAddress, 'get_version', [1n, 1n]))
+      assert(isFinalized(receipt) && current.revision === '3' && current.phase === 'DONE' && current.outcome === 'CONFORMANT' && String(count) === '1' && historical.revision === '1', 'reconciliation readback mismatch')
+      return { receipt, readback: { current, count, historical } }
+    })
+  } else {
+    if (PARTIAL_RESUME_MODE) {
     operations.push(...partialEvidence.operations.map((item) => jsonSafe(item)))
     allEvents.push(...partialEvidence.rpcRequests.map((item) => jsonSafe(item)))
     requestSequence = partialEvidence.requestSequence
@@ -739,7 +848,7 @@ try {
     return { hash, transaction, readback: current }
   })
 
-  const reconciliation = await operation('S7-reconciliation', 'one explicit retained-hash receipt lookup and three authoritative readbacks', async () => {
+  reconciliation = await operation('S7-reconciliation', 'one explicit retained-hash receipt lookup and three authoritative readbacks', async () => {
     const receipt = await client.getTransaction({ hash: freeze.hash })
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     const count = await readContract(client, contractAddress, 'get_count', [])
@@ -747,6 +856,7 @@ try {
     assert(isFinalized(receipt) && current.revision === '3' && current.phase === 'DONE' && current.outcome === 'CONFORMANT' && String(count) === '1' && historical.revision === '1', 'reconciliation readback mismatch')
     return { receipt, readback: { current, count, historical } }
   })
+  }
 
   assert(allEvents.length === requestSequence, `RPC event sequence mismatch: ${allEvents.length} != ${requestSequence}`)
   assert(allEvents.every((event) => event.operation && event.operation !== 'unscoped'), 'Unscoped RPC event present')
@@ -769,6 +879,7 @@ try {
     resumeMode: RESUME_MODE,
     restartMode: RESTART_MODE,
     partialResumeMode: PARTIAL_RESUME_MODE,
+    finalReconcileMode: FINAL_RECONCILE_MODE,
     resumeEvidence: resumeEvidenceSummary,
     operationRequestCaps: OPERATION_REQUEST_CAPS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
