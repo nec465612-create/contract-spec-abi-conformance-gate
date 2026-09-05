@@ -77,6 +77,8 @@ h2 { margin-bottom: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.04e
 .transaction-progress-hash { flex-wrap: wrap; color: var(--muted); font-size: 10px; }
 .transaction-progress-hash code { overflow-wrap: anywhere; color: var(--gold); font-size: 10px; }
 .transaction-progress-hash .quiet-button { margin-left: auto; padding: 4px 7px; color: var(--accent); font-size: 10px; }
+.transaction-progress-explorer { color: var(--accent); font-size: 10px; font-weight: 700; text-decoration: none; }
+.transaction-progress-explorer:hover { text-decoration: underline; }
 .transaction-progress-warning { color: var(--gold) !important; }
 .transaction-progress-reconcile { justify-self: start; margin-left: 0; }
 @keyframes transaction-progress-spin { to { transform: rotate(360deg); } }

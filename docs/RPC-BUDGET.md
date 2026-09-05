@@ -9,6 +9,7 @@ Revision binding: the PRE_DEPLOY package binds this matrix to the exact source c
 - Every RPC request, retry attempt, receipt query, readback, and wallet-provider request is counted in the evidence for the operation that triggered it.
 - Reads use one shared FIFO queue. A hidden document pauses scheduled polling; it does not create a second poller. A new request is not submitted to compensate for a paused or uncertain read.
 - Retry-After is honored. Retries are bounded; when the bound is exhausted, the hash/journal or read state is preserved and the UI stops automatic work.
+- The implementation spends one request slot before every retry attempt: explicit list/detail reads are capped at one network attempt; a write has at most three finality attempts and two authoritative readback attempts; reconciliation has one receipt attempt and two readback attempts. A retry cannot silently amplify a row beyond its matrix maximum.
 - Cache keys include chain, contract, method, and arguments. A mutation or explicit refresh invalidates the relevant cache before authoritative readback.
 - No full-portfolio or interval polling is used. The landing view performs zero automatic chain reads.
 

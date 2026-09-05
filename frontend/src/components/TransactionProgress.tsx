@@ -37,10 +37,11 @@ const PHASE_COPY: Record<WriteProgress['phase'], string> = {
 
 export interface TransactionProgressProps {
   progress: WriteProgress
+  explorerUrl?: string
   onReconcile?: () => void
 }
 
-export function TransactionProgress({ progress, onReconcile }: TransactionProgressProps) {
+export function TransactionProgress({ progress, explorerUrl, onReconcile }: TransactionProgressProps) {
   const [copied, setCopied] = useState(false)
   if (progress.phase === 'IDLE') return null
 
@@ -63,6 +64,7 @@ export function TransactionProgress({ progress, onReconcile }: TransactionProgre
       data-transaction-phase={progress.phase}
       role={alert ? 'alert' : 'status'}
       aria-live={alert ? 'assertive' : 'polite'}
+      aria-atomic="true"
       aria-label="Transaction progress"
     >
       <div className="transaction-progress-heading">
@@ -78,6 +80,7 @@ export function TransactionProgress({ progress, onReconcile }: TransactionProgre
           <span>Transaction hash</span>
           <code>{progress.hash}</code>
           <button className="quiet-button" type="button" onClick={() => void copyHash()}>{copied ? 'Copied' : 'Copy hash'}</button>
+          {explorerUrl && <a className="transaction-progress-explorer" href={explorerUrl} target="_blank" rel="noreferrer">View transaction</a>}
         </div>
       )}
       {progress.persistenceDegraded && <p className="transaction-progress-warning">Local recovery storage needs attention. Keep this hash before leaving the page.</p>}

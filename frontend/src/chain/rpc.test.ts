@@ -1,4 +1,4 @@
-import { RpcBudgetError, RpcReadQueue, sleepWithSignal, withRpcRetry } from './rpc'
+import { createRpcAttemptBudget, RpcBudgetError, RpcReadQueue, sleepWithSignal, withRpcRetry } from './rpc'
 
 describe('Studionet RPC budget', () => {
   it('serializes reads in FIFO order with one active operation', async () => {
@@ -96,6 +96,21 @@ describe('Studionet RPC budget', () => {
       throw transient
     }, { sleep: async () => undefined })).rejects.toBeInstanceOf(RpcBudgetError)
     expect(calls).toBe(3)
+  })
+
+  it('counts retry attempts against an operation budget', async () => {
+    const budget = createRpcAttemptBudget(2)
+    let calls = 0
+    const transient = Object.assign(new Error('too many requests'), { status: 429 })
+    await expect(withRpcRetry(async () => {
+      calls += 1
+      throw transient
+    }, {
+      beforeAttempt: budget.spend,
+      sleep: async () => undefined,
+    })).rejects.toBeInstanceOf(RpcBudgetError)
+    expect(calls).toBe(2)
+    expect(budget.used()).toBe(2)
   })
 
   it('cancels a pending retry delay', async () => {

@@ -2,7 +2,7 @@ import type { CalldataEncodable } from 'genlayer-js/types'
 import type { Address } from 'genlayer-js/types'
 import { getReadClient, type ContractAddress, type GenLayerClient } from './config'
 import { isRecord, stableStringify } from '../lib/encoding'
-import { sharedRpcReadQueue, withRpcRetry } from './rpc'
+import { sharedRpcReadQueue, withRpcRetry, type RpcAttemptBudget } from './rpc'
 
 export interface Requirement {
   id: string
@@ -364,33 +364,33 @@ export class ContractGateway {
     this.cache = sharedCacheFor(this.readClient.chain.id, address)
   }
 
-  private async read(functionName: string, args: CalldataEncodable[]): Promise<unknown> {
+  private async read(functionName: string, args: CalldataEncodable[], budget?: RpcAttemptBudget): Promise<unknown> {
     const key = `${this.readClient.chain.id}:${this.address.toLowerCase()}:${functionName}:${stableStringify(args)}`
     return this.cache.get(key, () => withRpcRetry(() => sharedRpcReadQueue.run(() => this.readClient.readContract({
         address: this.address as Address,
         functionName,
         args,
-      }))))
+      })), { beforeAttempt: budget?.spend }))
   }
 
-  async getCount(): Promise<string> {
-    return normalizedInteger(await this.read('get_count', []))
+  async getCount(budget?: RpcAttemptBudget): Promise<string> {
+    return normalizedInteger(await this.read('get_count', [], budget))
   }
 
-  async listCases(startId = '1', limit = '4'): Promise<CasePage> {
-    return pageReturn(await this.read('list_cases', [BigInt(startId), BigInt(limit)]))
+  async listCases(startId = '1', limit = '4', budget?: RpcAttemptBudget): Promise<CasePage> {
+    return pageReturn(await this.read('list_cases', [BigInt(startId), BigInt(limit)], budget))
   }
 
-  async getCase(id: string): Promise<CaseRecord | null> {
-    return caseRecord(await this.read('get_case', [BigInt(id)]))
+  async getCase(id: string, budget?: RpcAttemptBudget): Promise<CaseRecord | null> {
+    return caseRecord(await this.read('get_case', [BigInt(id)], budget))
   }
 
-  async getVersion(id: string, revision: string): Promise<CaseRecord | null> {
-    return caseRecord(await this.read('get_version', [BigInt(id), BigInt(revision)]))
+  async getVersion(id: string, revision: string, budget?: RpcAttemptBudget): Promise<CaseRecord | null> {
+    return caseRecord(await this.read('get_version', [BigInt(id), BigInt(revision)], budget))
   }
 
-  async getIdByNonce(account: ContractAddress, nonce: string): Promise<string> {
-    return normalizedInteger(await this.read('get_id_by_nonce', [account, nonce]))
+  async getIdByNonce(account: ContractAddress, nonce: string, budget?: RpcAttemptBudget): Promise<string> {
+    return normalizedInteger(await this.read('get_id_by_nonce', [account, nonce], budget))
   }
 
   invalidate(): void {

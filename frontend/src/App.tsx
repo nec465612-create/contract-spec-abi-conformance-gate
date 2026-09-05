@@ -7,7 +7,7 @@ import {
 } from './chain/contract'
 import { assertWalletContext, contractAddress, genlayerChain, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
 import { executeContractWrite, reconcileJournalEntry, writeIntent, type WriteProgress } from './chain/write-coordinator'
-import { RpcBudgetError } from './chain/rpc'
+import { createRpcAttemptBudget, RpcBudgetError, type RpcAttemptBudget } from './chain/rpc'
 import { JournalError, JournalStore, type JournalEntry } from './persistence/journal'
 import { isRecord, jsonSafe, sha256Hex, stableStringify } from './lib/encoding'
 import { requestAccounts, useWalletProviders } from './wallet/providers'
@@ -164,12 +164,13 @@ async function verifyFailedCaseMutation(
   method: string,
   caller: string,
   args: unknown[],
+  budget?: RpcAttemptBudget,
 ): Promise<void> {
   gateway.invalidate()
-  const before = await gateway.getVersion(caseId, preRevision)
+  const before = await gateway.getVersion(caseId, preRevision, budget)
   if (!before || await caseStateHash(before) !== preHash) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
   const nextRevision = String(BigInt(preRevision) + 1n)
-  const after = await gateway.getVersion(caseId, nextRevision)
+  const after = await gateway.getVersion(caseId, nextRevision, budget)
   if (after === null) return
   if (after.id !== caseId || after.revision !== nextRevision || !(await isDifferentAcceptedOperation(after, method, caller, args))) {
     throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
@@ -523,7 +524,7 @@ export default function App() {
     setError(null)
     try {
       gateway.invalidate()
-      const page = await gateway.listCases()
+      const page = await gateway.listCases('1', '4', createRpcAttemptBudget(1))
       setCaseCount(String(page.ids.length))
       setCaseIds(page.ids)
     } catch (loadError) {
@@ -540,7 +541,7 @@ export default function App() {
     setError(null)
     try {
       gateway.invalidate()
-      const record = await gateway.getCase(id)
+      const record = await gateway.getCase(id, createRpcAttemptBudget(1))
       setSelectedCase(record)
       if (record) setReplaceJson(JSON.stringify(record.base, null, 2))
     } catch (loadError) {
@@ -579,11 +580,15 @@ export default function App() {
     writeAbortRef.current = controller
     try {
       await assertWalletContext(request.provider, request.account)
-      await executeContractWrite(journal, { ...request, signal: controller.signal, onProgress: setWriteProgress })
+      const completed = await executeContractWrite(journal, { ...request, signal: controller.signal, onProgress: setWriteProgress })
       refreshJournal()
       gateway?.invalidate()
-      await refreshCases()
-      if (selectedId) await loadCase(selectedId)
+      if (isRecord(completed.readback) && completed.readback.v === 1 && typeof completed.readback.id === 'string' && typeof completed.readback.revision === 'string') {
+        const record = completed.readback as unknown as CaseRecord
+        setSelectedId(record.id)
+        setSelectedCase(record)
+        setReplaceJson(JSON.stringify(record.base, null, 2))
+      }
       setNotice(successMessage)
     } catch (writeError) {
       setError(friendlyError(writeError))
@@ -606,7 +611,7 @@ export default function App() {
     setBusyAction(reconcileKey)
     setError(null)
     try {
-      await reconcileJournalEntry(journal, entry, async () => {
+      const reconciled = await reconcileJournalEntry(journal, entry, async (budget) => {
         recoveryGateway.invalidate()
         const createMatch = /^create:(0x[0-9a-f]{40}):([0-9a-f]{32})$/.exec(entry.intent)
         if (createMatch) {
@@ -616,9 +621,9 @@ export default function App() {
             throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
           }
           const { parsed } = normalizeBaseJson(args[1])
-          const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2])
+          const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2], budget)
           if (id === '0') throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
-          const record = await recoveryGateway.getVersion(id, '1')
+          const record = await recoveryGateway.getVersion(id, '1', budget)
           if (!record || record.id !== id || record.revision !== '1' || record.primary.toLowerCase() !== entry.account || record.parent !== args[2]) {
             throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
           }
@@ -645,9 +650,9 @@ export default function App() {
           if (args.length !== 2) throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
           operationArgs.push(caseMatch[3])
         }
-        const before = await recoveryGateway.getVersion(caseMatch[2], caseMatch[3])
+        const before = await recoveryGateway.getVersion(caseMatch[2], caseMatch[3], budget)
         if (!before || await caseStateHash(before) !== entry.pre_hash) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
-        const record = await recoveryGateway.getVersion(caseMatch[2], expectedRevision)
+        const record = await recoveryGateway.getVersion(caseMatch[2], expectedRevision, budget)
         if (!record || record.id !== caseMatch[2] || record.revision !== expectedRevision || record.primary.toLowerCase() !== entry.account || !operationPostcondition(record, caseMatch[1], before)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
@@ -655,11 +660,11 @@ export default function App() {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
         return record
-      }, async () => {
+      }, async (budget) => {
         recoveryGateway.invalidate()
         const createMatch = /^create:(0x[0-9a-f]{40}):([0-9a-f]{32})$/.exec(entry.intent)
         if (createMatch) {
-          const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2])
+          const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2], budget)
           if (id !== '0') throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
           return
         }
@@ -678,13 +683,17 @@ export default function App() {
           if (args.length !== 2) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
           operationArgs.push(caseMatch[3])
         }
-        await verifyFailedCaseMutation(recoveryGateway, caseMatch[2], entry.pre_revision, entry.pre_hash, caseMatch[1], entry.account, operationArgs)
+        await verifyFailedCaseMutation(recoveryGateway, caseMatch[2], entry.pre_revision, entry.pre_hash, caseMatch[1], entry.account, operationArgs, budget)
       }, setWriteProgress, controller.signal)
       recoveryGateway.invalidate()
       gateway?.invalidate()
       refreshJournal()
-      await refreshCases()
-      if (selectedId) await loadCase(selectedId)
+      if (isRecord(reconciled.readback) && reconciled.readback.v === 1 && typeof reconciled.readback.id === 'string' && typeof reconciled.readback.revision === 'string') {
+        const record = reconciled.readback as unknown as CaseRecord
+        setSelectedId(record.id)
+        setSelectedCase(record)
+        setReplaceJson(JSON.stringify(record.base, null, 2))
+      }
       setNotice(`${pendingLabel(entry)} was reconciled and verified.`)
     } catch (reconcileError) {
       setError(friendlyError(reconcileError))
@@ -726,7 +735,6 @@ export default function App() {
       const { canonical, parsed } = normalizeBaseJson(baseJson)
       const parentId = BigInt(parent)
       const preHash = await sha256Hex(stableStringify([nonce, parsed, parentId.toString()]))
-      let createdId = ''
       await runWrite({
         provider: session.provider,
         account: session.account as ContractAddress,
@@ -736,12 +744,12 @@ export default function App() {
         intent: writeIntent('create_case', null, null, session.account, nonce),
         preRevision: '0',
         preHash,
-        readback: async () => {
+        readback: async (budget) => {
           gateway.invalidate()
-          createdId = await gateway.getIdByNonce(session.account as ContractAddress, nonce)
-          if (createdId === '0') throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
-          const record = await gateway.getVersion(createdId, '1')
-          if (!record || record.id !== createdId || record.revision !== '1' || record.primary.toLowerCase() !== session.account.toLowerCase() || record.parent !== parentId.toString()) {
+          const id = await gateway.getIdByNonce(session.account as ContractAddress, nonce, budget)
+          if (id === '0') throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
+          const record = await gateway.getVersion(id, '1', budget)
+          if (!record || record.id !== id || record.revision !== '1' || record.primary.toLowerCase() !== session.account.toLowerCase() || record.parent !== parentId.toString()) {
             throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
           }
           if (!(await operationMatches(record, 'create_case', session.account, [nonce, parsed, parentId.toString()]))) {
@@ -749,13 +757,12 @@ export default function App() {
           }
           return record
         },
-        failureReadback: async () => {
+        failureReadback: async (budget) => {
           gateway.invalidate()
-          const failedId = await gateway.getIdByNonce(session.account as ContractAddress, nonce)
+          const failedId = await gateway.getIdByNonce(session.account as ContractAddress, nonce, budget)
           if (failedId !== '0') throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
         },
       }, 'Case created and verified on chain.')
-      if (createdId) await loadCase(createdId)
     } catch (createError) {
       setError(friendlyError(createError))
     }
@@ -790,9 +797,9 @@ export default function App() {
       intent: writeIntent(method, selectedCase.id, expectedRevision, null, null),
       preRevision: expectedRevision,
       preHash,
-      readback: async () => {
+      readback: async (budget) => {
         gateway.invalidate()
-        const updated = await gateway.getVersion(selectedCase.id, nextRevision)
+        const updated = await gateway.getVersion(selectedCase.id, nextRevision, budget)
         if (!updated || updated.revision !== nextRevision || updated.primary.toLowerCase() !== session.account.toLowerCase() || !operationPostcondition(updated, method, selectedCase)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
@@ -801,7 +808,7 @@ export default function App() {
         }
         return updated
       },
-      failureReadback: () => verifyFailedCaseMutation(gateway, selectedCase.id, expectedRevision, preHash, method, session.account, operationArgs),
+      failureReadback: (budget) => verifyFailedCaseMutation(gateway, selectedCase.id, expectedRevision, preHash, method, session.account, operationArgs, budget),
     }, method === 'replace_base' ? 'Base specification replaced and verified.' : `${method.replace('_', ' ')} finalized and verified.`)
   }
 

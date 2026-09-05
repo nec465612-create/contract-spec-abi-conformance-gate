@@ -38,6 +38,24 @@ export interface RpcRetryOptions {
   maxJitterMs?: number
   random?: () => number
   sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>
+  beforeAttempt?: () => void
+}
+
+export interface RpcAttemptBudget {
+  spend: () => void
+  used: () => number
+}
+
+export function createRpcAttemptBudget(maxRequests: number): RpcAttemptBudget {
+  const maximum = Math.max(1, Math.floor(maxRequests))
+  let count = 0
+  return {
+    spend: () => {
+      if (count >= maximum) throw new RpcBudgetError(true, 'The bounded RPC budget for this operation is exhausted. Preserve the transaction evidence and reconcile later.')
+      count += 1
+    },
+    used: () => count,
+  }
 }
 
 interface QueuedRead<T> {
@@ -192,6 +210,7 @@ export async function withRpcRetry<T>(operation: () => Promise<T>, options: RpcR
 
   while (true) {
     throwIfAborted(options.signal)
+    options.beforeAttempt?.()
     try {
       return await operation()
     } catch (error) {

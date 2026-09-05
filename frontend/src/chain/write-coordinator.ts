@@ -3,7 +3,7 @@ import { genlayerChain, getReadClient, getWriteClient, type ContractAddress } fr
 import { classifyReceipt, isFinalizedReceipt, isTransactionHash, receiptStatus } from './receipt'
 import { JournalError, JournalStore, type JournalEntry } from '../persistence/journal'
 import type { Eip1193Provider } from '../wallet/types'
-import { RpcBudgetError, sharedRpcReadQueue, sleepWithSignal, waitForDocumentVisible, withRpcRetry } from './rpc'
+import { createRpcAttemptBudget, RpcBudgetError, sharedRpcReadQueue, sleepWithSignal, waitForDocumentVisible, withRpcRetry, type RpcAttemptBudget } from './rpc'
 
 export const TRANSACTION_PHASES = [
   'IDLE',
@@ -38,8 +38,8 @@ export interface ContractWriteRequest<TReadback> {
   intent: string
   preRevision: string
   preHash: string
-  readback: () => Promise<TReadback>
-  failureReadback: () => Promise<void>
+  readback: (budget?: RpcAttemptBudget) => Promise<TReadback>
+  failureReadback: (budget?: RpcAttemptBudget) => Promise<void>
   signal?: AbortSignal
   onProgress?: ProgressListener
 }
@@ -96,12 +96,13 @@ function emitProgress(listener: ProgressListener | undefined, phase: Transaction
  */
 async function waitForFinality(hash: TransactionHash, signal?: AbortSignal): Promise<GenLayerTransaction> {
   const client = getReadClient()
+  const budget = createRpcAttemptBudget(3)
   let last: GenLayerTransaction | undefined
   for (const delay of [2_000, 4_000, 8_000]) {
     await waitForDocumentVisible(signal)
     await sleepWithSignal(delay, signal)
     await waitForDocumentVisible(signal)
-    last = await withRpcRetry(() => sharedRpcReadQueue.run(() => client.getTransaction({ hash }), signal), { signal })
+    last = await withRpcRetry(() => sharedRpcReadQueue.run(() => client.getTransaction({ hash }), signal), { signal, beforeAttempt: budget.spend })
     const status = receiptStatus(last)
     if (status.contradictory) throw new WriteCoordinatorError('INVALID_RECEIPT', 'The transaction receipt contains contradictory status fields.')
     if (isFinalizedReceipt(last)) return last
@@ -200,7 +201,7 @@ export async function executeContractWrite<TReadback>(
     const current = store.find(entry.reservation)
     if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') {
       try {
-        await request.failureReadback()
+        await request.failureReadback(createRpcAttemptBudget(2))
         await store.markFinalizedError(store.find(entry.reservation))
         emitProgress(request.onProgress, 'FAILED', { hash: hash as `0x${string}`, message: classified.message })
       } catch (error) {
@@ -220,7 +221,7 @@ export async function executeContractWrite<TReadback>(
 
   try {
     emitProgress(request.onProgress, 'VERIFYING_READBACK', { hash: hash as `0x${string}` })
-    const readback = await request.readback()
+    const readback = await request.readback(createRpcAttemptBudget(2))
     const current = store.find(entry.reservation)
     const verified = await store.markVerified(current)
     emitProgress(request.onProgress, 'SUCCESS', { hash: hash as `0x${string}` })
@@ -238,8 +239,8 @@ export async function executeContractWrite<TReadback>(
 export async function reconcileJournalEntry<TReadback>(
   store: JournalStore,
   entry: JournalEntry,
-  readback: () => Promise<TReadback>,
-  failureReadback: () => Promise<void>,
+  readback: (budget?: RpcAttemptBudget) => Promise<TReadback>,
+  failureReadback: (budget?: RpcAttemptBudget) => Promise<void>,
   onProgress?: ProgressListener,
   signal?: AbortSignal,
 ): Promise<ReconciliationResult<TReadback>> {
@@ -251,7 +252,7 @@ export async function reconcileJournalEntry<TReadback>(
   let receipt: GenLayerTransaction
   try {
     emitProgress(onProgress, 'WAITING_FOR_FINALITY', { hash: entry.tx_hash as `0x${string}` })
-    receipt = await withRpcRetry(() => sharedRpcReadQueue.run(() => getReadClient().getTransaction({ hash: entry.tx_hash as TransactionHash }), signal), { signal })
+    receipt = await withRpcRetry(() => sharedRpcReadQueue.run(() => getReadClient().getTransaction({ hash: entry.tx_hash as TransactionHash }), signal), { signal, beforeAttempt: createRpcAttemptBudget(1).spend })
   } catch (error) {
     emitProgress(onProgress, 'RECONCILIATION_REQUIRED', {
       hash: entry.tx_hash as `0x${string}`,
@@ -265,7 +266,7 @@ export async function reconcileJournalEntry<TReadback>(
   if (!classified.ok) {
     if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') {
       try {
-        await failureReadback()
+        await failureReadback(createRpcAttemptBudget(2))
         await store.markFinalizedError(store.find(entry.reservation))
         emitProgress(onProgress, 'FAILED', { hash: entry.tx_hash as `0x${string}`, message: classified.message })
       } catch (error) {
@@ -285,7 +286,7 @@ export async function reconcileJournalEntry<TReadback>(
 
   try {
     emitProgress(onProgress, 'VERIFYING_READBACK', { hash: entry.tx_hash as `0x${string}` })
-    const result = await readback()
+    const result = await readback(createRpcAttemptBudget(2))
     const verified = await store.markVerified(store.find(entry.reservation))
     emitProgress(onProgress, 'SUCCESS', { hash: entry.tx_hash as `0x${string}` })
     return { hash: entry.tx_hash as `0x${string}`, receipt, readback: result, journal: verified }
