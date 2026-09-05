@@ -1,6 +1,6 @@
 # PRE_DEPLOY readiness
 
-Status: POST_DEPLOY_TEST candidate — exact Studio deployment/E2E is complete; anonymous POST_DEPLOY_TEST review is pending. GitHub/Vercel publication and Vercel E2E have not started.
+Status: POST_DEPLOY_TEST CHANGES REQUIRED — exact Studio deployment/E2E is complete, but RPC-STUDIO-001 remains open after anonymous review. GitHub/Vercel publication and Vercel E2E have not started.
 
 ## Contract lifecycle classification
 

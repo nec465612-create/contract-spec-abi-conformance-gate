@@ -1,6 +1,6 @@
 # Live verification
 
-Status: POST_DEPLOY_TEST candidate. Studio execution is complete; the Vercel browser run has not started.
+Status: POST_DEPLOY_TEST CHANGES REQUIRED. Studio execution/readbacks are complete, but the anonymous reviewer’s P0 Studio RPC measurement finding remains open; the Vercel browser run has not started.
 
 Evidence date: 2026-09-05 (Asia/Saigon)
 
@@ -77,5 +77,11 @@ On the recovery tab, retries stopped at the observed 30 requests per minute limi
 Frontend live counts are intentionally not claimed here: the Vercel release and browser E2E have not started. The frontend matrix remains a required part of the next release gate, not a Studio substitute.
 
 ## Remaining gate boundary
+
+## Post-review remediation audit
+
+The retained reviewer report identified RPC-STUDIO-001 as a blocking missing structured per-operation Studio request ledger. Safe recovery attempts were made without replaying the original address: all Studio tabs were closed to stop background traffic; after cooldown, a fresh Contracts tab immediately produced Rate limit exceeded: 30 requests per minute -32029 and gen_getContractSchema errors from the Studio developer log; a fresh Run and Debug deep-link also surfaced the same rate-limit state. The permitted browser evaluate context exposes no fetch, XMLHttpRequest, performance, or equivalent network-counter API, and Studio dev logs expose errors rather than a complete successful-request ledger.
+
+No API key was available, no Reset Storage action was executed, and no disposable deployment was submitted because the Studio service remained rate-limited before a clean measured S0/S1 run could begin. The original contract address remains read-only evidence only. This audit does not close RPC-STUDIO-001; it records why replaying or fabricating counts would violate the RPC-economy rule.
 
 This document is evidence for the retained exact source, the completed Studio deployment/E2E, and the planned frontend release measurements. It is not a Vercel E2E result, GitHub/Vercel final approval, or Explorer submission approval.

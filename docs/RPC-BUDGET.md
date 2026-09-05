@@ -1,6 +1,6 @@
 # RPC budget matrix
 
-Status: POST_DEPLOY_TEST candidate. The original PRE_DEPLOY matrices remain below as historical plan templates. The live Studio evidence is recorded separately and the frontend release evidence is intentionally pending Vercel E2E.
+Status: POST_DEPLOY_TEST CHANGES REQUIRED. The original PRE_DEPLOY matrices remain below as historical plan templates. The live Studio evidence is recorded separately; RPC-STUDIO-001 remains open and the frontend release evidence is intentionally pending Vercel E2E.
 
 Revision binding: the live Studio ledger binds to source commit de66367b459ed421b73bdfb7f3d04bf15088ed38, contract source SHA-256 AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45, chain 61999, contract 0x6de11297EaF221eb95A9E34e5A0e418061789250, and account 0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902. Studio and frontend budgets are separate ledgers. A result in one ledger cannot satisfy the other.
 
@@ -51,6 +51,7 @@ This is an explicit measurement limitation, not a PASS. It is carried into the a
 | S7 read-only reconciliation | 1 receipt + 2 readbacks planned | 0 | get_case(1), get_count(), get_version(1,1), with Finalized selector | Not reconstructable from the retained Studio UI log | Read-only evidence exact; request total unavailable |
 
 The recovery tab hit the observed 30 requests per minute Studio limit. Per the governing rule, retries stopped, the hash/state was preserved, cooldown was honored, and Explorer was used read-only for corroboration. The frontend ledger below remains independent and has not been substituted by this Studio result.
+Post-review remediation audit: after the reviewer returned RPC-STUDIO-001, all Studio tabs were closed to stop background traffic. After cooldown, a fresh Contracts tab immediately hit 30 requests per minute -32029 while Studio’s developer log reported gen_getContractSchema and Monaco Linter errors. A Run and Debug deep-link reproduced the rate-limit state. The permitted browser evaluate context has no fetch, XMLHttpRequest, performance, or equivalent request-counter API, and Studio dev logs do not provide a complete successful-request ledger. No API key, Reset Storage action, disposable deployment, or new transaction was used. Actual per-operation Studio RPC counts remain unmeasured; this audit keeps the gate blocked rather than fabricating compliance.
 
 ### PRE_DEPLOY template (historical)
 
