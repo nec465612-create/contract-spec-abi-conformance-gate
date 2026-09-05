@@ -53,6 +53,8 @@ const RESTART_MODE = Boolean(requestedRestart)
 let resumeEvidenceSummary = null
 let approvedResumeHash = null
 let approvedResumeAddress = null
+let approvedDeploymentAccount = null
+let approvedDeploymentEvidence = null
 
 const base1 = {
   requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
@@ -168,6 +170,8 @@ try {
     const manifest = JSON.parse(await readFile(RESUME_MANIFEST_PATH, 'utf8'))
     const manifestDeploymentHash = manifest.deployment?.hash
     const manifestContractAddress = manifest.deployment?.contractAddress
+    const manifestDeploymentAccount = manifest.deployment?.account
+    const deploymentEvidenceFile = manifest.priorRun?.fullEvidenceFile
     if (
       !['BLOCKED_PARTIAL', 'BLOCKED_PARTIAL_CASE_ACCEPTED'].includes(manifest.status) ||
       manifest.sourceCommit !== EXPECTED_SOURCE_COMMIT ||
@@ -176,10 +180,28 @@ try {
       manifest.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
       !/^0x[0-9a-fA-F]{64}$/.test(manifestDeploymentHash ?? '') ||
       !/^0x[0-9a-fA-F]{40}$/.test(manifestContractAddress ?? '') ||
+      !/^0x[0-9a-fA-F]{40}$/.test(manifestDeploymentAccount ?? '') ||
+      !/^studio-rpc-run-\d+\.json$/.test(deploymentEvidenceFile ?? '') ||
       manifest.deployment?.status !== 'FINALIZED' ||
       manifest.deployment?.sourceReadbackSha256 !== EXPECTED_SOURCE_SHA256
     ) {
       throw new Error('Resume manifest does not match the approved finalized deployment.')
+    }
+    const deploymentEvidence = JSON.parse(await readFile(resolve(ROOT, 'docs', 'evidence', deploymentEvidenceFile), 'utf8'))
+    const deploymentRow = deploymentEvidence.transactions?.find((item) => item.id === 'S2-deploy')
+    const schemaOperation = deploymentEvidence.operations?.find((item) => item.id === 'S1-schema')
+    if (
+      deploymentEvidence.exactSourceCommit !== EXPECTED_SOURCE_COMMIT ||
+      deploymentEvidence.sourceSha256 !== EXPECTED_SOURCE_SHA256 ||
+      deploymentEvidence.contractAddress?.toLowerCase() !== manifestContractAddress.toLowerCase() ||
+      deploymentRow?.hash?.toLowerCase() !== manifestDeploymentHash.toLowerCase() ||
+      deploymentRow?.deploymentAccount?.toLowerCase() !== manifestDeploymentAccount.toLowerCase() ||
+      deploymentRow?.deployedSha256 !== EXPECTED_SOURCE_SHA256 ||
+      deploymentRow?.transaction?.statusName !== 'FINALIZED' ||
+      schemaOperation?.status !== 'PASS' ||
+      schemaOperation?.result?.methodCount !== 12
+    ) {
+      throw new Error('Resume deployment evidence does not prove the approved finalized source binding.')
     }
     if (RESUME_MODE && requestedResumeHash.toLowerCase() !== manifestDeploymentHash.toLowerCase()) {
       throw new Error(`Resume deployment hash does not match the manifest deployment: ${requestedResumeHash}`)
@@ -195,12 +217,16 @@ try {
     }
     approvedResumeHash = manifestDeploymentHash
     approvedResumeAddress = manifestContractAddress
+    approvedDeploymentAccount = manifestDeploymentAccount
+    approvedDeploymentEvidence = deploymentRow
     resumeEvidenceSummary = {
       manifest: 'docs/evidence/studio-rpc-recovery-manifest.json',
       deploymentHash: approvedResumeHash,
       contractAddress: approvedResumeAddress,
       mode: RESTART_MODE ? 'replacement' : 'resume',
       manifestStatus: manifest.status,
+      deploymentEvidenceFile,
+      reusedFinalizedEvidence: true,
       priorRequestSequence: manifest.priorRun?.requestSequence ?? null,
       priorTransactionCount: manifest.priorRun?.transactionCount ?? null,
       priorBlockedAt: manifest.priorRun?.blockedAt ?? null,
@@ -486,23 +512,42 @@ try {
     return { chainId, account: account.address, balance }
   })
 
-  await operation('S1-schema', 'verify exact source schema once before deployment', async () => {
+  await operation('S1-schema', RESUME_MODE ? 'reuse the approved source/schema binding without another RPC' : 'verify exact source schema once before deployment', async () => {
+    if (RESUME_MODE) return { reusedFinalizedEvidence: true, skippedRpc: true }
     const schema = await client.getContractSchemaForCode(source)
     assert(Object.keys(schema.methods).length === 12, `Expected 12 methods, got ${Object.keys(schema.methods).length}`)
     return { methodCount: Object.keys(schema.methods).length, methodNames: Object.keys(schema.methods).sort() }
   })
 
-  const deploy = await operation('S2-deploy', RESUME_MODE ? 'revalidate the one approved finalized deployment without resubmitting' : 'submit exact source once and await bounded finality', async () => {
-    const hash = RESUME_MODE
-      ? approvedResumeHash
-      : await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
+  const deploy = await operation('S2-deploy', RESUME_MODE ? 'reuse the one approved finalized deployment/readback without another RPC or submission' : 'submit exact source once and await bounded finality', async () => {
+    if (RESUME_MODE) {
+      const hash = approvedResumeHash
+      contractAddress = approvedResumeAddress
+      const txRow = retainTransaction('S2-deploy', hash)
+      Object.assign(txRow, {
+        address: contractAddress,
+        transaction: approvedDeploymentEvidence.transaction,
+        deployedSha256: EXPECTED_SOURCE_SHA256,
+        deploymentAccount: approvedDeploymentAccount,
+        resumed: true,
+        reusedFinalizedEvidence: true,
+      })
+      return {
+        hash,
+        contractAddress,
+        transaction: approvedDeploymentEvidence.transaction,
+        deployedSha256: EXPECTED_SOURCE_SHA256,
+        resumed: true,
+        reusedFinalizedEvidence: true,
+      }
+    }
+    const hash = await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
     const txRow = retainTransaction('S2-deploy', hash)
     const transaction = await waitForFinalized(client, 'S2-deploy', hash)
     // Studio deploy receipts expose finality but not a contract-call execution result; source parity below proves deployment success.
     assert(isFinalized(transaction), `deployment was not finalized: ${JSON.stringify(jsonSafe(transaction))}`)
     contractAddress = transaction.recipient ?? transaction.to_address
     assert(typeof contractAddress === 'string' && /^0x[0-9a-fA-F]{40}$/.test(contractAddress), `Missing deployed contract address for ${hash}`)
-    if (RESUME_MODE) assert(contractAddress.toLowerCase() === approvedResumeAddress.toLowerCase(), `Resumed deployment address mismatch: ${contractAddress}`)
     const deployedCode = await client.getContractCode(contractAddress)
     const deployedSha256 = createHash('sha256').update(deployedCode).digest('hex').toUpperCase()
     assert(deployedSha256 === EXPECTED_SOURCE_SHA256, `Deployed source hash mismatch: ${deployedSha256}`)

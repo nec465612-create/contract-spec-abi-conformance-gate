@@ -42,5 +42,5 @@
     "creator": "0x5e2a13Bb9B4eCe636cf93C22e1D587B6Dc5F12b3",
     "reason": "Case 1 is owner-bound and its creator key was not retained; this deployment is never resumed."
   },
-  "resumeRule": "Resume only the current BLOCKED_PARTIAL deployment with the exact hash/address pair from this manifest and a new disposable account. Do not submit another deployment. Restart mode is prohibited for BLOCKED_PARTIAL and is reserved for an accepted owner-bound partial only."
+  "resumeRule": "Resume only the current BLOCKED_PARTIAL deployment with the exact hash/address pair from this manifest and a new disposable account. Resume locally validates and reuses the prior exact schema/deployment evidence without S1/S2 RPCs, then permits one bounded case-write sequence. Do not submit another deployment. Restart mode is prohibited for BLOCKED_PARTIAL and is reserved for an accepted owner-bound partial only."
 }
