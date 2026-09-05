@@ -224,6 +224,7 @@ try {
       !sourceBindingMatches({ sourceCommit: prior.exactSourceCommit, sourceSha256: prior.sourceSha256 }) ||
       prior.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
       prior.account?.toLowerCase() !== expectedAccount.toLowerCase() ||
+      prior.chainId !== 61999 ||
       !/^0x[0-9a-fA-F]{40}$/.test(prior.contractAddress ?? '') ||
       JSON.stringify(priorOperations) !== JSON.stringify(expectedOperations) ||
       prior.requestSequence !== prior.rpcRequests?.length ||
@@ -236,8 +237,13 @@ try {
       !createRow ||
       !/^0x[0-9a-fA-F]{64}$/.test(deploymentRow.hash ?? '') ||
       !/^0x[0-9a-fA-F]{64}$/.test(createRow.hash ?? '') ||
+      deploymentRow.deployedSha256?.toLowerCase() !== EXPECTED_SOURCE_SHA256.toLowerCase() ||
+      deploymentRow.address?.toLowerCase() !== prior.contractAddress.toLowerCase() ||
+      deploymentRow.deploymentAccount?.toLowerCase() !== expectedAccount.toLowerCase() ||
+      deploymentRow.transaction?.from_address?.toLowerCase() !== expectedAccount.toLowerCase() ||
       !isFinalized(deploymentRow.transaction) ||
       !isFinalized(createRow.transaction) ||
+      String(createRow.transaction?.result_name ?? '').toUpperCase() !== 'MAJORITY_AGREE' ||
       !isExecutionSuccess(createRow.transaction) ||
       readback.status !== 'PASS' ||
       readback.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
@@ -500,17 +506,16 @@ function isQuorumCancellation(receipt) {
 }
 
 function executionResultValues(transaction) {
-  const majorityAgree = String(transaction?.result_name ?? '').toUpperCase() === 'MAJORITY_AGREE'
   return [
     transaction?.txExecutionResultName,
     transaction?.txExecutionResult,
     transaction?.execution_result,
     transaction?.executionResult,
     ...(transaction?.consensus_data?.leader_receipt ?? [])
-      .filter((receipt) => !(majorityAgree && String(receipt?.vote ?? '').toLowerCase() === 'idle'))
+      .filter((receipt) => !isQuorumCancellation(receipt))
       .map((receipt) => receipt?.execution_result),
     ...(transaction?.consensus_data?.validators ?? [])
-      .filter((validator) => !isQuorumCancellation(validator) && !(majorityAgree && String(validator?.vote ?? '').toLowerCase() === 'idle'))
+      .filter((validator) => !isQuorumCancellation(validator))
       .map((validator) => validator?.execution_result),
   ].filter((value) => value !== undefined && value !== null)
 }
@@ -610,6 +615,7 @@ try {
       transaction: txs.find((item) => item.id === 'S3-create-case1')?.transaction,
       readback: partialReadbackEvidence.readback,
       reclassifiedFrom: 'BLOCKED_EXECUTION_SHAPE',
+      originalResultName: 'MAJORITY_AGREE',
       reconciliationEvidence: `docs/evidence/${requestedPartialReadbackPath}`,
     }
     createOperation.reclassification = 'FINALIZED_MAJORITY_AGREE_READBACK_CONFIRMED'
