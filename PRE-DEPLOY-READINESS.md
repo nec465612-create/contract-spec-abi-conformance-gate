@@ -20,7 +20,7 @@ This classification is a release decision, not a claim that the contract survive
 | Explorer | `https://genlayer-explorer.vercel.app` |
 | Contract address | Not deployed |
 | Deployment transaction | Not submitted |
-| Exact source commit | `f9fa45d4bb9fea829ee878b9bc2d3bd8b41fc85c` (correction commit; contract/frontend bytes) |
+| Exact source commit | `a046347c0600cfdc3aeab25e48689dbf4a6f144d` (correction commit; contract/frontend bytes) |
 | Exact source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` (`contracts/main.py`) |
 | Constructor arguments | None (`__init__()` only) |
 | Linked contracts | None |
