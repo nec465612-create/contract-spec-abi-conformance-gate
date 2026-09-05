@@ -89,6 +89,18 @@ function retryAfter(responseText, response) {
   }
 }
 
+function sourceBindingMatches(value) {
+  return value &&
+    typeof value.sourceCommit === 'string' &&
+    typeof value.sourceSha256 === 'string' &&
+    value.sourceCommit.toLowerCase() === EXPECTED_SOURCE_COMMIT.toLowerCase() &&
+    value.sourceSha256.toLowerCase() === EXPECTED_SOURCE_SHA256.toLowerCase()
+}
+
+function hashMatches(value, expected) {
+  return typeof value === 'string' && value.toLowerCase() === expected.toLowerCase()
+}
+
 async function writeEvidenceFile(evidence) {
   const outputPath = resolve(ROOT, 'docs', 'evidence', `studio-rpc-run-${Date.now()}.json`)
   await mkdir(dirname(outputPath), { recursive: true })
@@ -163,7 +175,7 @@ try {
       ) {
         throw new Error('Existing recovery manifest has an invalid source binding; refusing to classify or reuse it.')
       }
-      if (existingManifest.sourceCommit === EXPECTED_SOURCE_COMMIT && existingManifest.sourceSha256 === EXPECTED_SOURCE_SHA256) {
+      if (sourceBindingMatches(existingManifest)) {
         throw new Error('A finalized partial deployment manifest exists for the current source; refusing a second deployment. Use the approved resume or explicit partial-run restart mode.')
       }
       resumeEvidenceSummary = {
@@ -184,8 +196,7 @@ try {
     const deploymentEvidenceFile = manifest.priorRun?.fullEvidenceFile
     if (
       !['BLOCKED_PARTIAL', 'BLOCKED_PARTIAL_CASE_ACCEPTED'].includes(manifest.status) ||
-      manifest.sourceCommit !== EXPECTED_SOURCE_COMMIT ||
-      manifest.sourceSha256 !== EXPECTED_SOURCE_SHA256 ||
+      !sourceBindingMatches(manifest) ||
       manifest.chainId !== 61999 ||
       manifest.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
       !/^0x[0-9a-fA-F]{64}$/.test(manifestDeploymentHash ?? '') ||
@@ -193,7 +204,7 @@ try {
       !/^0x[0-9a-fA-F]{40}$/.test(manifestDeploymentAccount ?? '') ||
       !/^studio-rpc-run-\d+\.json$/.test(deploymentEvidenceFile ?? '') ||
       manifest.deployment?.status !== 'FINALIZED' ||
-      manifest.deployment?.sourceReadbackSha256 !== EXPECTED_SOURCE_SHA256
+      !hashMatches(manifest.deployment?.sourceReadbackSha256, EXPECTED_SOURCE_SHA256)
     ) {
       throw new Error('Resume manifest does not match the approved finalized deployment.')
     }
@@ -201,12 +212,11 @@ try {
     const deploymentRow = deploymentEvidence.transactions?.find((item) => item.id === 'S2-deploy')
     const schemaOperation = deploymentEvidence.operations?.find((item) => item.id === 'S1-schema')
     if (
-      deploymentEvidence.exactSourceCommit !== EXPECTED_SOURCE_COMMIT ||
-      deploymentEvidence.sourceSha256 !== EXPECTED_SOURCE_SHA256 ||
+      !sourceBindingMatches({ sourceCommit: deploymentEvidence.exactSourceCommit, sourceSha256: deploymentEvidence.sourceSha256 }) ||
       deploymentEvidence.contractAddress?.toLowerCase() !== manifestContractAddress.toLowerCase() ||
       deploymentRow?.hash?.toLowerCase() !== manifestDeploymentHash.toLowerCase() ||
       deploymentRow?.deploymentAccount?.toLowerCase() !== manifestDeploymentAccount.toLowerCase() ||
-      deploymentRow?.deployedSha256 !== EXPECTED_SOURCE_SHA256 ||
+      !hashMatches(deploymentRow?.deployedSha256, EXPECTED_SOURCE_SHA256) ||
       deploymentRow?.transaction?.statusName !== 'FINALIZED' ||
       schemaOperation?.status !== 'PASS' ||
       schemaOperation?.result?.methodCount !== 10
