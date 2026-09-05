@@ -13,6 +13,9 @@ const requestedEndpoint = process.env.STUDIO_RPC_ENDPOINT
 const ENDPOINT = EXACT_STUDIO_RPC_ENDPOINT
 const EXPECTED_SOURCE_COMMIT = 'de66367b459ed421b73bdfb7f3d04bf15088ed38'
 const EXPECTED_SOURCE_SHA256 = 'AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45'
+const EXPECTED_RESUME_DEPLOYMENT_HASH = '0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84'
+const EXPECTED_RESUME_CONTRACT_ADDRESS = '0xd1FADDEfbbCbF737e56a9E23803650c02c3369E2'
+const RESUME_MANIFEST_PATH = resolve(ROOT, 'docs/evidence/studio-rpc-recovery-manifest.json')
 const RUN_CONFIRM = 'CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN'
 const STATUS_SCHEDULE_SECONDS = [10, 20, 40, 80]
 const MAX_STATUS_CHECKS = STATUS_SCHEDULE_SECONDS.length
@@ -44,6 +47,10 @@ let contractAddress = null
 const txs = []
 let source = null
 let sourceSha256 = null
+const requestedResumeHash = process.env.STUDIO_RESUME_DEPLOYMENT_HASH ?? null
+const requestedResumeAddress = process.env.STUDIO_RESUME_CONTRACT_ADDRESS ?? null
+const RESUME_MODE = Boolean(requestedResumeHash || requestedResumeAddress)
+let resumeEvidenceSummary = null
 
 const base1 = {
   requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
@@ -112,6 +119,8 @@ function blockedEvidence(error, accountAddress = null) {
     operations,
     rpcRequests: allEvents,
     requestSequence,
+    resumeMode: RESUME_MODE,
+    resumeEvidence: resumeEvidenceSummary,
     error: { message: String(error), code: error?.code ?? null },
     generatedAt: new Date().toISOString(),
   }
@@ -134,6 +143,47 @@ try {
   const reviewedSha256 = createHash('sha256').update(sourceAtReviewedCommit).digest('hex').toUpperCase()
   if (reviewedSha256 !== EXPECTED_SOURCE_SHA256) {
     throw new Error(`Reviewed source hash mismatch: ${reviewedSha256}`)
+  }
+  if (Boolean(requestedResumeHash) !== Boolean(requestedResumeAddress)) {
+    throw new Error('Resume mode requires both STUDIO_RESUME_DEPLOYMENT_HASH and STUDIO_RESUME_CONTRACT_ADDRESS.')
+  }
+  if (!RESUME_MODE) {
+    try {
+      await readFile(RESUME_MANIFEST_PATH, 'utf8')
+      throw new Error('A finalized partial deployment manifest exists; refusing a second deployment. Use the approved resume mode.')
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+  }
+  if (RESUME_MODE) {
+    if (requestedResumeHash.toLowerCase() !== EXPECTED_RESUME_DEPLOYMENT_HASH.toLowerCase()) {
+      throw new Error(`Resume deployment hash is not the approved partial-run hash: ${requestedResumeHash}`)
+    }
+    if (requestedResumeAddress.toLowerCase() !== EXPECTED_RESUME_CONTRACT_ADDRESS.toLowerCase()) {
+      throw new Error(`Resume contract address is not the approved partial-run address: ${requestedResumeAddress}`)
+    }
+    const manifest = JSON.parse(await readFile(RESUME_MANIFEST_PATH, 'utf8'))
+    if (
+      manifest.status !== 'BLOCKED_PARTIAL' ||
+      manifest.sourceCommit !== EXPECTED_SOURCE_COMMIT ||
+      manifest.sourceSha256 !== EXPECTED_SOURCE_SHA256 ||
+      manifest.chainId !== 61999 ||
+      manifest.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
+      manifest.deployment?.hash?.toLowerCase() !== EXPECTED_RESUME_DEPLOYMENT_HASH.toLowerCase() ||
+      manifest.deployment?.contractAddress?.toLowerCase() !== EXPECTED_RESUME_CONTRACT_ADDRESS.toLowerCase() ||
+      manifest.deployment?.status !== 'FINALIZED' ||
+      manifest.deployment?.sourceReadbackSha256 !== EXPECTED_SOURCE_SHA256
+    ) {
+      throw new Error('Resume manifest does not match the approved finalized deployment.')
+    }
+    resumeEvidenceSummary = {
+      manifest: 'docs/evidence/studio-rpc-recovery-manifest.json',
+      deploymentHash: EXPECTED_RESUME_DEPLOYMENT_HASH,
+      contractAddress: EXPECTED_RESUME_CONTRACT_ADDRESS,
+      priorRequestSequence: manifest.priorRun?.requestSequence ?? null,
+      priorTransactionCount: manifest.priorRun?.transactionCount ?? null,
+      priorBlockedAt: manifest.priorRun?.blockedAt ?? null,
+    }
   }
 } catch (error) {
   preflightError = error
@@ -408,17 +458,21 @@ try {
     return { methodCount: Object.keys(schema.methods).length, methodNames: Object.keys(schema.methods).sort() }
   })
 
-  const deploy = await operation('S2-deploy', 'submit exact source once and await bounded finality', async () => {
-    const hash = await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
+  const deploy = await operation('S2-deploy', RESUME_MODE ? 'revalidate the one approved finalized deployment without resubmitting' : 'submit exact source once and await bounded finality', async () => {
+    const hash = RESUME_MODE
+      ? requestedResumeHash
+      : await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
     const txRow = retainTransaction('S2-deploy', hash)
     const transaction = await waitForFinalized(client, 'S2-deploy', hash)
+    assert(isFinalized(transaction) && isExecutionSuccess(transaction), `deployment was not a finalized successful transaction: ${JSON.stringify(jsonSafe(transaction))}`)
     contractAddress = transaction.recipient ?? transaction.to_address
     assert(typeof contractAddress === 'string' && /^0x[0-9a-fA-F]{40}$/.test(contractAddress), `Missing deployed contract address for ${hash}`)
+    if (RESUME_MODE) assert(contractAddress.toLowerCase() === requestedResumeAddress.toLowerCase(), `Resumed deployment address mismatch: ${contractAddress}`)
     const deployedCode = await client.getContractCode(contractAddress)
     const deployedSha256 = createHash('sha256').update(deployedCode).digest('hex').toUpperCase()
     assert(deployedSha256 === EXPECTED_SOURCE_SHA256, `Deployed source hash mismatch: ${deployedSha256}`)
-    Object.assign(txRow, { address: contractAddress, transaction: jsonSafe(transaction), deployedSha256 })
-    return { hash, contractAddress, transaction, deployedSha256 }
+    Object.assign(txRow, { address: contractAddress, transaction: jsonSafe(transaction), deployedSha256, deploymentAccount: transaction.from_address ?? null, resumed: RESUME_MODE })
+    return { hash, contractAddress, transaction, deployedSha256, resumed: RESUME_MODE }
   })
 
   const create1 = await operation('S3-create-case1', 'one unique create_case write plus two readbacks', async () => {
@@ -554,6 +608,8 @@ try {
     operations,
     rpcRequests: allEvents,
     requestSequence,
+    resumeMode: RESUME_MODE,
+    resumeEvidence: resumeEvidenceSummary,
     operationRequestCaps: OPERATION_REQUEST_CAPS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     operationTimeoutMs: OPERATION_TIMEOUT_MS,

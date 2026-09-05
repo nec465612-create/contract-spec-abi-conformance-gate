@@ -1,0 +1,22 @@
+{
+  "status": "BLOCKED_PARTIAL",
+  "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
+  "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
+  "chainId": 61999,
+  "endpoint": "https://studio.genlayer.com/api",
+  "deployment": {
+    "hash": "0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84",
+    "contractAddress": "0xd1FADDEfbbCbF737e56a9E23803650c02c3369E2",
+    "account": "0xB139BA985D873fabD16f80B9dBA445C88711AE85",
+    "status": "FINALIZED",
+    "sourceReadbackSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45"
+  },
+  "priorRun": {
+    "requestSequence": 17,
+    "transactionCount": 1,
+    "blockedAt": "S3-create-case1",
+    "error": "Rate limit exceeded: 30 requests per minute",
+    "fullEvidenceFile": "studio-rpc-run-1788602486753.json"
+  },
+  "resumeRule": "Reuse this finalized deployment exactly once; do not submit another deployment. Use a new disposable account only for the unaccepted case writes."
+}

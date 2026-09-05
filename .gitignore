@@ -8,5 +8,6 @@ artifacts/
 frontend/node_modules/
 frontend/dist/
 .vercel/
+docs/evidence/studio-rpc-run-*.json
 .env*
 !.env.example
