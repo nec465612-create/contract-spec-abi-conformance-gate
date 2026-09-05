@@ -38,6 +38,8 @@ The later recovery window is preserved in [studio-platform-health-recovery-windo
 
 The measurement-mode lock is preserved in [studio-rpc-observable-action-ledger-retrospective-20260906.json](evidence/studio-rpc-observable-action-ledger-retrospective-20260906.json). The physical request count is explicitly `NONE`; the retained instrumented disposable run records 52 observable requests across S0–S6, five submitted hashes, bounded status checks, terminal/readback evidence and zero duplicate transactions. The older frozen UI run remains a retrospective observable-action record with an unreconstructable physical count. This corrects the measurement classification only; it does not convert the S6 `TIMEOUT` or platform-health predicate into PASS.
 
+A fresh bounded read-only health sample is preserved in [studio-platform-health-current-1788630182.json](evidence/studio-platform-health-current-1788630182.json). It reports `status=degraded`, issue `max_recovery_cycles_exhausted`, `stuck_finalization_count=1`, `max_recovery_exhausted_count=1`, `no_progress_check_error=true`, `no_progress_scan_suppressed=true`, and backlog `48`; this is current external platform evidence and keeps the Studio readiness predicate false. No write, retry, redeploy, or release action followed the sample.
+
 ## Historical frozen UI binding (not current measured run)
 
 | Field | Value |

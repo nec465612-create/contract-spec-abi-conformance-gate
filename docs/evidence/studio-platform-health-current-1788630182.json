@@ -1,0 +1,72 @@
+{
+  "kind": "STUDIO_PLATFORM_HEALTH_SAMPLE",
+  "sampledAtUtc": "2026-09-05T17:43:05.7659149+00:00",
+  "endpoint": "https://studio.genlayer.com/health",
+  "readOnly": true,
+  "timeoutSeconds": 20,
+  "response": {
+    "status": "degraded",
+    "timestamp": 1788630182.91461,
+    "cache_age_ms": 6453.84,
+    "last_check_duration_ms": 749.43,
+    "issues": [
+      "max_recovery_cycles_exhausted"
+    ],
+    "services": {
+      "genvm": {
+        "status": "healthy",
+        "max_permits": 13,
+        "available_permits": 13,
+        "current_permits": 0,
+        "active_executions": 0
+      },
+      "database": {
+        "status": "healthy",
+        "pool_size": 10,
+        "checked_out": 0
+      },
+      "consensus": {
+        "processing_transactions": 1,
+        "orphaned_transactions": 0,
+        "stuck_finalization_count": 1,
+        "recovery_storm_count": 0,
+        "max_recovery_count": 0,
+        "max_recovery_exhausted_count": 1,
+        "max_recovery_exhausted_transactions": [
+          {
+            "hash": "0xfcc1fdff606db2aa00a5b0bada1f6c71c48338d71f7659a23e19b5b032ffa67a",
+            "contract_address": "0x2c43B5282af2Fc73bdef578E82EeAA78BB5346DB",
+            "recovery_count": 3,
+            "exhausted_at": 1788628216
+          }
+        ],
+        "no_consensus_progress": false,
+        "no_progress_backlog_count": 48,
+        "seconds_since_consensus_progress": null,
+        "no_progress_check_error": true,
+        "no_progress_scan_suppressed": true,
+        "active_workers": 1,
+        "status": "degraded"
+      },
+      "llm_providers": {
+        "status": "healthy",
+        "alert_providers": [],
+        "window_minutes": 15,
+        "total_samples": 232
+      },
+      "memory": {
+        "status": "healthy",
+        "usage_mb": 801.40625,
+        "percent": 1.2669107200926384,
+        "cpu_percent": 19.9
+      },
+      "redis": "healthy"
+    },
+    "meta": {
+      "pid": 1,
+      "workers": "1",
+      "check_interval_s": 10.0
+    }
+  },
+  "releaseAuthorization": false
+}
