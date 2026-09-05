@@ -1,0 +1,52 @@
+{
+  "status": "PASS",
+  "kind": "SPARSE_AUTHORITATIVE_READ_AFTER_FINALIZED_PARTIAL_WRITES",
+  "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
+  "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
+  "chainId": 61999,
+  "endpoint": "https://studio.genlayer.com/api",
+  "contractAddress": "0xa84f59Fb13056DF9707D4c0aaFFc730ec275afC5",
+  "deploymentHash": "0xe2307ea2f953e61c8963cce50225b420b5908652622c7396524c5a7773372509",
+  "transactionHashVariant": "latest-final",
+  "requestSequence": 2,
+  "requests": [
+    {
+      "operation": "sparse-read",
+      "method": "gen_call",
+      "functionName": "get_count",
+      "result": "1"
+    },
+    {
+      "operation": "sparse-read",
+      "method": "gen_call",
+      "functionName": "get_case",
+      "args": ["1"],
+      "result": {
+        "id": "1",
+        "revision": "2",
+        "phase": "BASE_DRAFT",
+        "primary": "0xb7e803f91336aa8646d7ad6e90327c3811c583d2",
+        "secondary": "0xb7e803f91336aa8646d7ad6e90327c3811c583d2",
+        "accepted_attempts": 0,
+        "last_accepted_at": "0",
+        "last_operation": {
+          "method": "replace_base",
+          "caller": "0xb7e803f91336aa8646d7ad6e90327c3811c583d2"
+        },
+        "create_hash": "ab143f6453320bbcfc20d84050c85a8dbaaccd23b30c877dcedde44f035ccfcd"
+      }
+    }
+  ],
+  "authoritativeState": {
+    "caseCount": "1",
+    "case1Revision": "2",
+    "case1Phase": "BASE_DRAFT",
+    "case1Creator": "0xb7e803f91336AA8646D7aD6E90327C3811c583D2",
+    "case1AcceptedCreateHash": "0xea49bcddb897baf6dbd63d9daedb058e43810192fb36bbb2731f0e34df2ebef6",
+    "case1AcceptedReplaceHash": "0x17fd393deab82cc312951d2aa58db117507f63ffddb5745510529c56816eafe8",
+    "caseWriteAccepted": true
+  },
+  "transactionCount": 0,
+  "note": "Read-only follow-up after the runner stopped on a finalized replace_base receipt whose consensus quorum succeeded; no write retry was performed.",
+  "generatedAt": "2026-09-05T11:24:59.448Z"
+}

@@ -1,5 +1,5 @@
 {
-  "status": "BLOCKED_PARTIAL",
+  "status": "BLOCKED_PARTIAL_CASE_ACCEPTED",
   "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
   "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
   "chainId": 61999,
@@ -19,20 +19,34 @@
     "retryAfterSeconds": 5,
     "fullEvidenceFile": "studio-rpc-run-1788605236819.json"
   },
-  "latestResumeAttempt": {
+  "latestPartialRun": {
     "account": "0x9bF946ce0D0D02232176EbbAdc2C5dE1031a8BAA",
-    "requestSequence": 10,
-    "transactionCount": 1,
-    "blockedAt": "S3-create-case1",
-    "error": "Studio blocked eth_sendRawTransaction with HTTP 429 (30 requests per minute); no case write was accepted.",
-    "retryAfterSeconds": 46,
-    "fullEvidenceFile": "studio-rpc-run-1788606288514.json",
-    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788606443838.json",
+    "requestSequence": 21,
+    "transactionCount": 3,
+    "blockedAt": "S4-replace-case1",
+    "error": "replace_base finalized with MAJORITY_AGREE and three SUCCESS validators; the runner stopped because one idle validator cancellation was not yet excluded from execution classification.",
+    "fullEvidenceFile": "studio-rpc-run-1788607357538.json",
+    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788607499448.json",
     "sparseAuthoritativeRead": {
       "transactionHashVariant": "latest-final",
-      "method": "get_count",
-      "caseCount": "0"
+      "methods": ["get_count", "get_case"],
+      "caseCount": "1",
+      "case1Revision": "2"
     }
+  },
+  "partialCase": {
+    "caseId": "1",
+    "creator": "0xb7e803f91336AA8646D7aD6E90327C3811c583D2",
+    "createHash": "0xea49bcddb897baf6dbd63d9daedb058e43810192fb36bbb2731f0e34df2ebef6",
+    "createReceiptStatus": "FINALIZED",
+    "createConsensus": "MAJORITY_AGREE",
+    "replaceHash": "0x17fd393deab82cc312951d2aa58db117507f63ffddb5745510529c56816eafe8",
+    "replaceReceiptStatus": "FINALIZED",
+    "replaceConsensus": "MAJORITY_AGREE",
+    "replaceValidatorExecution": ["ERROR:CONSENSUS_VALIDATOR_QUORUM_REACHED", "SUCCESS", "SUCCESS", "SUCCESS"],
+    "stateReadbackFile": "studio-rpc-sparse-read-1788607499448.json",
+    "stateReadback": "case count 1; revision 2; BASE_DRAFT; last operation replace_base",
+    "ownerKeyRecovery": "not retained"
   },
   "supersededRecovery": {
     "status": "BLOCKED_PARTIAL_CASE_ACCEPTED",
@@ -42,5 +56,5 @@
     "creator": "0x5e2a13Bb9B4eCe636cf93C22e1D587B6Dc5F12b3",
     "reason": "Case 1 is owner-bound and its creator key was not retained; this deployment is never resumed."
   },
-  "resumeRule": "Resume only the current BLOCKED_PARTIAL deployment with the exact hash/address pair from this manifest and a new disposable account. Resume locally validates and reuses the prior exact schema/deployment evidence without S1/S2 RPCs, then permits one bounded case-write sequence. Do not submit another deployment. Restart mode is prohibited for BLOCKED_PARTIAL and is reserved for an accepted owner-bound partial only."
+  "resumeRule": "Do not resume this deployment: case 1 has accepted owner-bound writes and its creator key was not retained. After PRE_DEPLOY review, the only permitted next path is one explicit STUDIO_RESTART_PARTIAL_RUN replacement deployment; normal mode and resume mode must remain blocked."
 }

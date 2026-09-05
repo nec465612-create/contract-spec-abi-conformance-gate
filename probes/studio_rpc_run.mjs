@@ -397,6 +397,10 @@ function isFinalized(transaction) {
   return transaction?.statusName === 'FINALIZED' || transaction?.status === 7 || transaction?.status === '7'
 }
 
+function isQuorumCancellation(receipt) {
+  return String(receipt?.vote ?? '').toLowerCase() === 'idle' && receipt?.genvm_result?.error_code === 'CONSENSUS_VALIDATOR_QUORUM_REACHED'
+}
+
 function executionResultValues(transaction) {
   return [
     transaction?.txExecutionResultName,
@@ -404,7 +408,7 @@ function executionResultValues(transaction) {
     transaction?.execution_result,
     transaction?.executionResult,
     ...(transaction?.consensus_data?.leader_receipt ?? []).map((receipt) => receipt?.execution_result),
-    ...(transaction?.consensus_data?.validators ?? []).map((validator) => validator?.execution_result),
+    ...(transaction?.consensus_data?.validators ?? []).filter((validator) => !isQuorumCancellation(validator)).map((validator) => validator?.execution_result),
   ].filter((value) => value !== undefined && value !== null)
 }
 
@@ -544,6 +548,7 @@ try {
     const hash = await client.deployContract({ account, code: source, args: [], consensusMaxRotations: 3 })
     const txRow = retainTransaction('S2-deploy', hash)
     const transaction = await waitForFinalized(client, 'S2-deploy', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     // Studio deploy receipts expose finality but not a contract-call execution result; source parity below proves deployment success.
     assert(isFinalized(transaction), `deployment was not finalized: ${JSON.stringify(jsonSafe(transaction))}`)
     contractAddress = transaction.recipient ?? transaction.to_address
@@ -551,7 +556,7 @@ try {
     const deployedCode = await client.getContractCode(contractAddress)
     const deployedSha256 = createHash('sha256').update(deployedCode).digest('hex').toUpperCase()
     assert(deployedSha256 === EXPECTED_SOURCE_SHA256, `Deployed source hash mismatch: ${deployedSha256}`)
-    Object.assign(txRow, { address: contractAddress, transaction: jsonSafe(transaction), deployedSha256, deploymentAccount: transaction.from_address ?? null, resumed: RESUME_MODE })
+    Object.assign(txRow, { address: contractAddress, deployedSha256, deploymentAccount: transaction.from_address ?? null, resumed: RESUME_MODE })
     return { hash, contractAddress, transaction, deployedSha256, resumed: RESUME_MODE }
   })
 
@@ -559,11 +564,11 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'create_case', args: [nonce1, JSON.stringify(base1), 0n], value: 0n })
     const txRow = retainTransaction('S3-create-case1', hash)
     const transaction = await waitForFinalized(client, 'S3-create-case1', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `create_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const id = await readContract(client, contractAddress, 'get_id_by_nonce', [account.address, nonce1])
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     assert(String(id) === '1' && record.revision === '1' && record.phase === 'BASE_DRAFT', 'create_case readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { id, record } }
   })
 
@@ -571,11 +576,11 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'replace_base', args: [1n, JSON.stringify(base2), 1n], value: 0n })
     const txRow = retainTransaction('S4-replace-case1', hash)
     const transaction = await waitForFinalized(client, 'S4-replace-case1', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `replace_base failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     const historical = parseCase(await readContract(client, contractAddress, 'get_version', [1n, 1n]))
     assert(current.revision === '2' && historical.revision === '1', 'replace_base history readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { current, historical } }
   })
 
@@ -583,11 +588,11 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'freeze_case', args: [1n, 2n], value: 0n })
     const txRow = retainTransaction('S5-freeze-case1', hash)
     const transaction = await waitForFinalized(client, 'S5-freeze-case1', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `freeze_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     const historical = parseCase(await readContract(client, contractAddress, 'get_version', [1n, 2n]))
     assert(current.revision === '3' && current.phase === 'FROZEN' && historical.revision === '2', 'freeze_case readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { current, historical } }
   })
 
@@ -595,10 +600,10 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'evaluate_case', args: [1n, 3n], value: 0n })
     const txRow = retainTransaction('S6-evaluate-case1', hash)
     const transaction = await waitForFinalized(client, 'S6-evaluate-case1', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `evaluate_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     assert(current.revision === '4' && current.phase === 'DONE' && current.outcome === 'CONFORMANT' && current.result?.labels?.[0] === 'IMPLEMENTS', 'evaluate_case semantic readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: current }
   })
 
@@ -606,10 +611,11 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'replace_base', args: [1n, JSON.stringify(base2), 3n], value: 0n })
     const txRow = retainTransaction('S7-stale-negative', hash)
     const transaction = await waitForFinalized(client, 'S7-stale-negative', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isFinalized(transaction) && isExecutionError(transaction) && hasExpectedStaleError(transaction), `stale negative did not finalize as USER_ERROR STALE_REVISION: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     assert(current.revision === '4', 'stale negative changed current state')
-    Object.assign(txRow, { transaction: jsonSafe(transaction), expectedError: 'USER_ERROR STALE_REVISION' })
+    Object.assign(txRow, { expectedError: 'USER_ERROR STALE_REVISION' })
     return { hash, transaction, readback: current }
   })
 
@@ -617,11 +623,11 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'create_case', args: [nonce2, JSON.stringify(unknownBase), 0n], value: 0n })
     const txRow = retainTransaction('S8-create-case2', hash)
     const transaction = await waitForFinalized(client, 'S8-create-case2', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `case2 create failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const id = await readContract(client, contractAddress, 'get_id_by_nonce', [account.address, nonce2])
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(String(id) === '2' && record.revision === '1' && record.phase === 'BASE_DRAFT', 'case2 create readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: { id, record } }
   })
 
@@ -629,10 +635,10 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'freeze_case', args: [2n, 1n], value: 0n })
     const txRow = retainTransaction('S9-freeze-case2', hash)
     const transaction = await waitForFinalized(client, 'S9-freeze-case2', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `case2 freeze failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(record.revision === '2' && record.phase === 'FROZEN', 'case2 freeze readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: record }
   })
 
@@ -640,10 +646,10 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'evaluate_case', args: [2n, 2n], value: 0n })
     const txRow = retainTransaction('S10-evaluate-case2', hash)
     const transaction = await waitForFinalized(client, 'S10-evaluate-case2', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `case2 evaluate failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(record.revision === '3' && record.phase === 'UNRESOLVED' && record.outcome === 'UNRESOLVED' && record.result?.labels?.[0] === 'UNKNOWN', 'case2 unknown readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, transaction, readback: record }
   })
 
@@ -654,10 +660,10 @@ try {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'retry_case', args: [2n, 3n], value: 0n })
     const txRow = retainTransaction('S11-retry-case2', hash)
     const transaction = await waitForFinalized(client, 'S11-retry-case2', hash)
+    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isExecutionSuccess(transaction), `case2 retry failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
     assert(record.revision === '4' && record.phase === 'UNRESOLVED' && record.outcome === 'UNRESOLVED' && record.accepted_attempts === 2 && record.result?.labels?.[0] === 'UNKNOWN', 'case2 retry readback mismatch')
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
     return { hash, cooldownMs, transaction, readback: record }
   })
 
