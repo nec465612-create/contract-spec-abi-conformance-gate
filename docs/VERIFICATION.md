@@ -10,7 +10,7 @@ Evidence date: 2026-09-06 (Asia/Saigon)
 |---|---|
 | Adapted source commit | `cd833b78b43e22661ade6a4dddad3fc4269eb07a` |
 | Adapted source SHA-256 | `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F` |
-| Exact package HEAD | `git rev-parse HEAD` at review time (self-binding; last reviewed runner commit `0b61c77d48646f07c8390c631b12379d2c3781e6`) |
+| Exact package HEAD | `git rev-parse HEAD` at review time (self-binding; current runner identity is the SHA-256 of `probes/studio_rpc_run.mjs` at review time) |
 | Adapted Studio deployment | `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D` |
 | Adapted deployment hash | `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5` (FINALIZED) |
 | Adapted create hash | `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9` (FINALIZED, MAJORITY_AGREE) |

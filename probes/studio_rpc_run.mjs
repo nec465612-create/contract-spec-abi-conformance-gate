@@ -266,7 +266,7 @@ try {
       readback.contractAddress?.toLowerCase() !== prior.contractAddress.toLowerCase() ||
       readback.account?.toLowerCase() !== expectedAccount.toLowerCase() ||
       readback.requestCount !== readback.rpcRequests?.length ||
-      !readback.rpcRequests?.every((event) => event.operation && event.operation !== 'unscoped') ||
+      !readback.rpcRequests?.every((event) => event.method === 'gen_call' && !event.transactionHash) ||
       readback.readback?.id !== '1' ||
       readback.readback?.count !== '1' ||
       readback.readback?.record?.revision !== '1' ||
