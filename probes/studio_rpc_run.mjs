@@ -44,9 +44,15 @@ let sourceSha256 = null
 const requestedResumeHash = process.env.STUDIO_RESUME_DEPLOYMENT_HASH ?? null
 const requestedResumeAddress = process.env.STUDIO_RESUME_CONTRACT_ADDRESS ?? null
 const requestedRestart = process.env.STUDIO_RESTART_PARTIAL_RUN ?? null
+const requestedPartialResume = process.env.STUDIO_PARTIAL_RESUME ?? null
+const requestedPartialEvidencePath = process.env.STUDIO_PARTIAL_EVIDENCE_PATH ?? null
+const requestedPartialReadbackPath = process.env.STUDIO_PARTIAL_READBACK_PATH ?? null
 const RESUME_MODE = Boolean(requestedResumeHash || requestedResumeAddress)
 const RESTART_MODE = Boolean(requestedRestart)
+const PARTIAL_RESUME_MODE = Boolean(requestedPartialResume || requestedPartialEvidencePath || requestedPartialReadbackPath)
 let resumeEvidenceSummary = null
+let partialEvidence = null
+let partialReadbackEvidence = null
 let approvedResumeHash = null
 let approvedResumeAddress = null
 let approvedDeploymentAccount = null
@@ -101,6 +107,11 @@ function hashMatches(value, expected) {
   return typeof value === 'string' && value.toLowerCase() === expected.toLowerCase()
 }
 
+function resolveEvidencePath(value, label) {
+  if (!value || !/^[a-zA-Z0-9._-]+\.json$/.test(value)) throw new Error(`${label} must be a simple JSON filename.`)
+  return resolve(ROOT, 'docs', 'evidence', value)
+}
+
 async function writeEvidenceFile(evidence) {
   const outputPath = resolve(ROOT, 'docs', 'evidence', `studio-rpc-run-${Date.now()}.json`)
   await mkdir(dirname(outputPath), { recursive: true })
@@ -125,6 +136,7 @@ function blockedEvidence(error, accountAddress = null) {
     requestSequence,
     resumeMode: RESUME_MODE,
     restartMode: RESTART_MODE,
+    partialResumeMode: PARTIAL_RESUME_MODE,
     resumeEvidence: resumeEvidenceSummary,
     error: { message: String(error), code: error?.code ?? null },
     generatedAt: new Date().toISOString(),
@@ -158,8 +170,17 @@ try {
   if (RESUME_MODE && RESTART_MODE) {
     throw new Error('Resume mode and partial-run restart mode are mutually exclusive.')
   }
+  if (PARTIAL_RESUME_MODE && (RESUME_MODE || RESTART_MODE)) {
+    throw new Error('Partial continuation cannot be combined with resume or replacement restart mode.')
+  }
   if (RESTART_MODE && requestedRestart !== RUN_CONFIRM) {
     throw new Error(`Set STUDIO_RESTART_PARTIAL_RUN=${RUN_CONFIRM} to authorize a replacement disposable run.`)
+  }
+  if (PARTIAL_RESUME_MODE && requestedPartialResume !== RUN_CONFIRM) {
+    throw new Error(`Set STUDIO_PARTIAL_RESUME=${RUN_CONFIRM} to authorize continuation from retained partial evidence.`)
+  }
+  if (PARTIAL_RESUME_MODE && (!requestedPartialEvidencePath || !requestedPartialReadbackPath)) {
+    throw new Error('Partial continuation requires both STUDIO_PARTIAL_EVIDENCE_PATH and STUDIO_PARTIAL_READBACK_PATH.')
   }
   if (!RESUME_MODE && !RESTART_MODE) {
     try {
@@ -186,6 +207,63 @@ try {
       }
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
+    }
+  }
+  if (PARTIAL_RESUME_MODE) {
+    const partialEvidenceFile = resolveEvidencePath(requestedPartialEvidencePath, 'STUDIO_PARTIAL_EVIDENCE_PATH')
+    const partialReadbackFile = resolveEvidencePath(requestedPartialReadbackPath, 'STUDIO_PARTIAL_READBACK_PATH')
+    const prior = JSON.parse(await readFile(partialEvidenceFile, 'utf8'))
+    const readback = JSON.parse(await readFile(partialReadbackFile, 'utf8'))
+    const expectedOperations = ['S0-funding', 'S0-preflight', 'S1-schema', 'S2-deploy', 'S3-create-case1']
+    const priorOperations = prior.operations?.map((item) => item.id)
+    const deploymentRow = prior.transactions?.find((item) => item.id === 'S2-deploy')
+    const createRow = prior.transactions?.find((item) => item.id === 'S3-create-case1')
+    const expectedAccount = createAccount(configuredPrivateKey).address
+    if (
+      prior.status !== 'BLOCKED' ||
+      !sourceBindingMatches({ sourceCommit: prior.exactSourceCommit, sourceSha256: prior.sourceSha256 }) ||
+      prior.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
+      prior.account?.toLowerCase() !== expectedAccount.toLowerCase() ||
+      !/^0x[0-9a-fA-F]{40}$/.test(prior.contractAddress ?? '') ||
+      JSON.stringify(priorOperations) !== JSON.stringify(expectedOperations) ||
+      prior.requestSequence !== prior.rpcRequests?.length ||
+      prior.requestSequence !== prior.operations?.reduce((total, item) => total + item.requestCount, 0) ||
+      !prior.rpcRequests?.every((event) => event.operation && event.operation !== 'unscoped') ||
+      !prior.operations?.every((item) => item.requestCount <= OPERATION_REQUEST_CAPS[item.id] && item.budgetWithinCap && item.allEventsRetained) ||
+      prior.transactionCount !== 2 ||
+      prior.transactionCount !== prior.transactions?.length ||
+      !deploymentRow ||
+      !createRow ||
+      !/^0x[0-9a-fA-F]{64}$/.test(deploymentRow.hash ?? '') ||
+      !/^0x[0-9a-fA-F]{64}$/.test(createRow.hash ?? '') ||
+      !isFinalized(deploymentRow.transaction) ||
+      !isFinalized(createRow.transaction) ||
+      !isExecutionSuccess(createRow.transaction) ||
+      readback.status !== 'PASS' ||
+      readback.endpoint !== EXACT_STUDIO_RPC_ENDPOINT ||
+      readback.sourceSha256?.toLowerCase() !== EXPECTED_SOURCE_SHA256.toLowerCase() ||
+      readback.contractAddress?.toLowerCase() !== prior.contractAddress.toLowerCase() ||
+      readback.account?.toLowerCase() !== expectedAccount.toLowerCase() ||
+      readback.requestCount !== readback.rpcRequests?.length ||
+      !readback.rpcRequests?.every((event) => event.operation && event.operation !== 'unscoped') ||
+      readback.readback?.id !== '1' ||
+      readback.readback?.count !== '1' ||
+      readback.readback?.record?.revision !== '1' ||
+      readback.readback?.record?.phase !== 'BASE_DRAFT'
+    ) {
+      throw new Error('Retained partial evidence/readback is not an exact current-source continuation boundary.')
+    }
+    partialEvidence = prior
+    partialReadbackEvidence = readback
+    contractAddress = prior.contractAddress
+    resumeEvidenceSummary = {
+      mode: 'partial-continuation',
+      priorEvidenceFile: `docs/evidence/${requestedPartialEvidencePath}`,
+      priorReadbackFile: `docs/evidence/${requestedPartialReadbackPath}`,
+      priorRequestSequence: prior.requestSequence,
+      priorTransactionCount: prior.transactionCount,
+      reclassifiedOperation: 'S3-create-case1',
+      reclassification: 'FINALIZED_MAJORITY_AGREE_READBACK_CONFIRMED',
     }
   }
   if (RESUME_MODE || RESTART_MODE) {
@@ -422,13 +500,18 @@ function isQuorumCancellation(receipt) {
 }
 
 function executionResultValues(transaction) {
+  const majorityAgree = String(transaction?.result_name ?? '').toUpperCase() === 'MAJORITY_AGREE'
   return [
     transaction?.txExecutionResultName,
     transaction?.txExecutionResult,
     transaction?.execution_result,
     transaction?.executionResult,
-    ...(transaction?.consensus_data?.leader_receipt ?? []).map((receipt) => receipt?.execution_result),
-    ...(transaction?.consensus_data?.validators ?? []).filter((validator) => !isQuorumCancellation(validator)).map((validator) => validator?.execution_result),
+    ...(transaction?.consensus_data?.leader_receipt ?? [])
+      .filter((receipt) => !(majorityAgree && String(receipt?.vote ?? '').toLowerCase() === 'idle'))
+      .map((receipt) => receipt?.execution_result),
+    ...(transaction?.consensus_data?.validators ?? [])
+      .filter((validator) => !isQuorumCancellation(validator) && !(majorityAgree && String(validator?.vote ?? '').toLowerCase() === 'idle'))
+      .map((validator) => validator?.execution_result),
   ].filter((value) => value !== undefined && value !== null)
 }
 
@@ -513,6 +596,24 @@ installOneShotSubmissionGuard(client)
 const nonce1 = 'c0f03716fea36fa4643b82f9bde0faf0'
 
 try {
+  if (PARTIAL_RESUME_MODE) {
+    operations.push(...partialEvidence.operations.map((item) => jsonSafe(item)))
+    allEvents.push(...partialEvidence.rpcRequests.map((item) => jsonSafe(item)))
+    requestSequence = partialEvidence.requestSequence
+    txs.push(...partialEvidence.transactions.map((item) => jsonSafe(item)))
+    contractAddress = partialEvidence.contractAddress
+    const createOperation = operations.find((item) => item.id === 'S3-create-case1')
+    createOperation.status = 'PASS'
+    delete createOperation.error
+    createOperation.result = {
+      hash: txs.find((item) => item.id === 'S3-create-case1')?.hash,
+      transaction: txs.find((item) => item.id === 'S3-create-case1')?.transaction,
+      readback: partialReadbackEvidence.readback,
+      reclassifiedFrom: 'BLOCKED_EXECUTION_SHAPE',
+      reconciliationEvidence: `docs/evidence/${requestedPartialReadbackPath}`,
+    }
+    createOperation.reclassification = 'FINALIZED_MAJORITY_AGREE_READBACK_CONFIRMED'
+  } else {
   await operation('S0-funding', 'fund one disposable account exactly once', async () => {
     return client.request({ method: 'sim_fundAccount', params: [account.address, 100000000000000000000] })
   })
@@ -579,6 +680,7 @@ try {
     assert(String(id) === '1' && record.revision === '1' && record.phase === 'BASE_DRAFT', 'create_case readback mismatch')
     return { hash, transaction, readback: { id, record } }
   })
+  }
 
   const replace = await operation('S4-replace-case1', 'one unique replace_base write plus current/history readbacks', async () => {
     const hash = await client.writeContract({ account, address: contractAddress, functionName: 'replace_base', args: [1n, JSON.stringify(base2), 1n], value: 0n })
@@ -645,6 +747,7 @@ try {
     requestSequence,
     resumeMode: RESUME_MODE,
     restartMode: RESTART_MODE,
+    partialResumeMode: PARTIAL_RESUME_MODE,
     resumeEvidence: resumeEvidenceSummary,
     operationRequestCaps: OPERATION_REQUEST_CAPS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,

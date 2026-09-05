@@ -1,0 +1,76 @@
+{
+  "status": "PASS",
+  "endpoint": "https://studio.genlayer.com/api",
+  "contractAddress": "0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D",
+  "account": "0x4a12D259dbBe3909d076b5b46B6809999748Fbc7",
+  "sourceSha256": "E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F",
+  "readback": {
+    "id": "1",
+    "count": "1",
+    "record": {
+      "base": {
+        "abi": [
+          {
+            "inputs": [],
+            "name": "check",
+            "outputs": [],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        "requirements": [
+          {
+            "id": "read",
+            "polarity": "REQUIRED",
+            "signature": "check()->():view",
+            "text": "Expose this exact read operation"
+          }
+        ]
+      },
+      "base_locked": false,
+      "create_hash": "eccec87c6ca227a7c7cd5267a75414b9bfa23c80d45948cd2c85eb57f89c7408",
+      "domain": {},
+      "id": "1",
+      "last_operation": {
+        "args_hash": "eccec87c6ca227a7c7cd5267a75414b9bfa23c80d45948cd2c85eb57f89c7408",
+        "caller": "0x4a12d259dbbe3909d076b5b46b6809999748fbc7",
+        "method": "create_case"
+      },
+      "outcome": "",
+      "parent": "0",
+      "phase": "BASE_DRAFT",
+      "primary": "0x4a12d259dbbe3909d076b5b46b6809999748fbc7",
+      "response": {},
+      "response_locked": false,
+      "result": {},
+      "revision": "1",
+      "secondary": "0x4a12d259dbbe3909d076b5b46b6809999748fbc7",
+      "v": 1
+    }
+  },
+  "requestCount": 3,
+  "rpcRequests": [
+    {
+      "sequence": 1,
+      "method": "gen_call",
+      "status": 200,
+      "durationMs": 1448,
+      "error": null
+    },
+    {
+      "sequence": 2,
+      "method": "gen_call",
+      "status": 200,
+      "durationMs": 1317,
+      "error": null
+    },
+    {
+      "sequence": 3,
+      "method": "gen_call",
+      "status": 200,
+      "durationMs": 1322,
+      "error": null
+    }
+  ],
+  "generatedAt": "2026-09-05T20:18:42.519Z"
+}
