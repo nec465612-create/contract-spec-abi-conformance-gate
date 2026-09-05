@@ -7,6 +7,7 @@ import {
 } from './chain/contract'
 import { assertWalletContext, contractAddress, genlayerChain, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
 import { executeContractWrite, reconcileJournalEntry, writeIntent } from './chain/write-coordinator'
+import { RpcBudgetError } from './chain/rpc'
 import { JournalError, JournalStore, type JournalEntry } from './persistence/journal'
 import { isRecord, jsonSafe, sha256Hex, stableStringify } from './lib/encoding'
 import { requestAccounts, useWalletProviders } from './wallet/providers'
@@ -54,11 +55,13 @@ function friendlyError(error: unknown): string {
     return 'Local transaction recovery is unavailable. No action was submitted.'
   }
   if (error instanceof Error) {
+    if (error instanceof RpcBudgetError) return error.message
     if (error.message === 'BASE_SPEC_SHAPE' || error.message === 'BASE_SPEC_INVALID' || error.message === 'BAD_JSON' || error.message === 'Unexpected end of JSON input') return 'Enter a valid base specification JSON object.'
     if (error.message === 'DUPLICATE_KEY') return 'Duplicate JSON keys are not allowed.'
     if (error.message === 'BASE_SPEC_TOO_LARGE') return 'The base specification is too large for this contract.'
     if (error.message === 'WRONG_NETWORK') return 'Connect the selected wallet to GenLayer Studionet before signing.'
     if (error.message === 'WALLET_ACCOUNT_CHANGED') return 'The selected wallet account changed. Reconnect it before signing.'
+    if (error.message.includes('chain RPC is temporarily rate-limited')) return error.message
     if (error.message.includes('AUTHORITATIVE_READBACK_MISMATCH')) return 'The transaction finalized, but the expected case state was not visible yet. Refresh and reconcile before retrying.'
     if (error.message.includes('FAILED_WRITE_POSTSTATE_MISMATCH')) return 'The failed transaction changed a historical revision unexpectedly. Keep the journal blocked and inspect the case.'
     if (error.message.includes('STALE_REVISION')) return 'This case changed on chain. Refresh it before submitting another action.'
@@ -424,6 +427,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [journalPage, setJournalPage] = useState(0)
+  const writeAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -454,6 +458,8 @@ export default function App() {
     if (!session) return undefined
     const provider = session.provider
     const invalidateSession = (message: string) => {
+      writeAbortRef.current?.abort()
+      gateway?.invalidate()
       setSession(null)
       setChooserOpen(false)
       setNotice(null)
@@ -474,7 +480,11 @@ export default function App() {
       provider.removeListener?.('chainChanged', onChainChanged)
       provider.removeListener?.('disconnect', onDisconnect)
     }
-  }, [session])
+  }, [gateway, session])
+
+  useEffect(() => () => {
+    writeAbortRef.current?.abort()
+  }, [])
 
   const refreshJournal = useCallback(() => {
     try {
@@ -492,8 +502,8 @@ export default function App() {
       const [count, page] = await Promise.all([gateway.getCount(), gateway.listCases()])
       setCaseCount(count)
       setCaseIds(page.ids)
-    } catch {
-      setError('Cases could not be loaded. Check the release configuration and try again.')
+    } catch (loadError) {
+      setError(friendlyError(loadError))
     } finally {
       setLoadingCases(false)
     }
@@ -512,8 +522,8 @@ export default function App() {
       const record = await gateway.getCase(id)
       setSelectedCase(record)
       if (record) setReplaceJson(JSON.stringify(record.base, null, 2))
-    } catch {
-      setError('This case could not be read from the contract.')
+    } catch (loadError) {
+      setError(friendlyError(loadError))
       setSelectedCase(null)
     } finally {
       setLoadingCase(false)
@@ -544,9 +554,11 @@ export default function App() {
     setBusyAction(request.method)
     setError(null)
     setNotice(null)
+    const controller = new AbortController()
+    writeAbortRef.current = controller
     try {
       await assertWalletContext(request.provider, request.account)
-      await executeContractWrite(journal, request)
+      await executeContractWrite(journal, { ...request, signal: controller.signal })
       refreshJournal()
       gateway?.invalidate()
       await refreshCases()
@@ -555,6 +567,7 @@ export default function App() {
     } catch (writeError) {
       setError(friendlyError(writeError))
     } finally {
+      if (writeAbortRef.current === controller) writeAbortRef.current = null
       refreshJournal()
       setBusyAction(null)
     }
@@ -567,6 +580,8 @@ export default function App() {
     }
     const recoveryGateway = new ContractGateway(entry.contract)
     const reconcileKey = `reconcile:${entry.reservation}`
+    const controller = new AbortController()
+    writeAbortRef.current = controller
     setBusyAction(reconcileKey)
     setError(null)
     try {
@@ -628,7 +643,7 @@ export default function App() {
         const caseMatch = /^(?:replace_base|freeze_case|evaluate_case|retry_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
         if (!caseMatch || String(BigInt(caseMatch[2])) !== entry.pre_revision) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
         await verifyFailedCaseMutation(recoveryGateway, caseMatch[1], entry.pre_revision, entry.pre_hash)
-      }, undefined)
+      }, undefined, controller.signal)
       recoveryGateway.invalidate()
       gateway?.invalidate()
       refreshJournal()
@@ -638,6 +653,7 @@ export default function App() {
     } catch (reconcileError) {
       setError(friendlyError(reconcileError))
     } finally {
+      if (writeAbortRef.current === controller) writeAbortRef.current = null
       refreshJournal()
       setBusyAction(null)
     }

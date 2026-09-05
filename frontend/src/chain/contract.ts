@@ -2,6 +2,7 @@ import type { CalldataEncodable } from 'genlayer-js/types'
 import type { Address } from 'genlayer-js/types'
 import { getReadClient, type ContractAddress, type GenLayerClient } from './config'
 import { isRecord, stableStringify } from '../lib/encoding'
+import { sharedRpcReadQueue, withRpcRetry } from './rpc'
 
 export interface Requirement {
   id: string
@@ -52,6 +53,7 @@ export interface CasePage {
 export class ReadCache {
   private readonly values = new Map<string, { expiresAt: number; value: unknown }>()
   private readonly inFlight = new Map<string, Promise<unknown>>()
+  private generation = 0
 
   async get<T>(key: string, loader: () => Promise<T>): Promise<T> {
     const cached = this.values.get(key)
@@ -60,18 +62,24 @@ export class ReadCache {
     const existing = this.inFlight.get(key)
     if (existing) return existing as Promise<T>
 
-    const pending = loader()
+    const generation = this.generation
+    let pending: Promise<T>
+    pending = loader()
       .then((value) => {
-        this.values.set(key, { expiresAt: Date.now() + 5_000, value })
+        if (generation === this.generation) this.values.set(key, { expiresAt: Date.now() + 5_000, value })
         return value
       })
-      .finally(() => this.inFlight.delete(key))
+      .finally(() => {
+        if (this.inFlight.get(key) === pending) this.inFlight.delete(key)
+      })
     this.inFlight.set(key, pending)
     return pending
   }
 
   invalidate(): void {
     this.values.clear()
+    this.inFlight.clear()
+    this.generation += 1
   }
 }
 
@@ -335,21 +343,34 @@ export function normalizeBaseJson(raw: string): { canonical: string; parsed: Bas
   return { canonical, parsed: parsed as BaseSpec, metrics: { ...metrics, bytes } }
 }
 
+const sharedCaches = new Map<string, ReadCache>()
+
+function sharedCacheFor(chainId: number, address: ContractAddress): ReadCache {
+  const key = `${chainId}:${address.toLowerCase()}`
+  const existing = sharedCaches.get(key)
+  if (existing) return existing
+  const cache = new ReadCache()
+  sharedCaches.set(key, cache)
+  return cache
+}
+
 export class ContractGateway {
-  readonly cache = new ReadCache()
+  readonly cache: ReadCache
 
   constructor(
     private readonly address: ContractAddress,
     private readonly readClient: GenLayerClient = getReadClient(),
-  ) {}
+  ) {
+    this.cache = sharedCacheFor(this.readClient.chain.id, address)
+  }
 
   private async read(functionName: string, args: CalldataEncodable[]): Promise<unknown> {
     const key = `${this.readClient.chain.id}:${this.address.toLowerCase()}:${functionName}:${stableStringify(args)}`
-    return this.cache.get(key, () => this.readClient.readContract({
-      address: this.address as Address,
-      functionName,
-      args,
-    }))
+    return this.cache.get(key, () => withRpcRetry(() => sharedRpcReadQueue.run(() => this.readClient.readContract({
+        address: this.address as Address,
+        functionName,
+        args,
+      }))))
   }
 
   async getCount(): Promise<string> {

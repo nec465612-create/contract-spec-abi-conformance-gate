@@ -30,6 +30,26 @@ This classification is a release decision, not a claim that the contract survive
 
 The manifest must be updated with the contract address and transaction hash after the corresponding gate allows deployment. No private key, seed phrase, token, or credential belongs in this file.
 
+## RPC economy and proof budget
+
+This plan applies both RPC layers: the released frontend and the primary-AI Studio/proof run. It is a budget and operating constraint, not live evidence.
+
+### Frontend Studionet RPC
+
+- `getReadClient()` is the single configured read client. `ContractGateway` shares one cache per chain/contract; cache keys include chain ID, contract, method, and normalized arguments.
+- Identical in-flight reads are single-flight. Safe reads are cached for a short bounded window and invalidated after a write, authoritative transition, account/network change, or contract-context change. Invalidated in-flight results cannot repopulate the cache.
+- The public screen uses one deliberate `get_count` read and one `list_cases` read; case selection uses one `get_case` read. There is no continuous background poller.
+- A write is submitted once. Finality uses only the lightweight GenLayer transaction object on a bounded `2s -> 4s -> 8s` schedule, then performs the required method-specific authoritative readback. A transient read is retried at most three times with `Retry-After` or bounded exponential backoff plus jitter and cancellation; it never resubmits the write.
+- Hidden/unmounted/disconnected views stop or cancel finality waits. RPC failures stay visibly classified as temporary RPC unavailability or reconciliation uncertainty.
+
+### Studio and proof-tooling RPC
+
+- The primary AI uses one in-app Studio tab, one shared chain/RPC reader, one active matrix row, and at most one read in flight. No parallel Studio tabs, ad-hoc scripts, duplicate Explorer refreshes, or competing pollers are allowed.
+- For each live write row: take one minimum pre-state snapshot; authorize and submit exactly once; retain the hash immediately; observe completion on the existing Studio transaction journey or with sparse completion-based status checks at `10s -> 20s -> 40s -> 80s` (maximum four checks, one at a time); stop polling when terminal, hidden, disconnected, aborted, or still pending after the bound.
+- At terminal state, perform one full transaction/readback inspection and only the minimum authoritative post-state reads needed by that row, followed by one Explorer/RPC corroboration for the consequential write. Stop all status polling before starting the next row.
+- On `429`, server-busy, or transient transport failure, honor `Retry-After`; otherwise use bounded backoff, stop before the budget is exhausted, preserve the existing hash/state, and resume with one sparse reconciliation after cooldown. Never replay a write because a status/readback call failed.
+- The run records attempted rows, retries, call counts, intervals, hashes, and readback evidence. A pending or unavailable row remains unresolved; it is not converted to PASS by a screenshot, timeout, or assumed Studio result.
+
 ## Recovery limits and runbook
 
 - **Local UI/storage reset while chain state remains:** reconnect the recorded public Studio deployment account, restore the exact reviewed release, configure the recorded contract address, and verify the frozen contract through the live matrix. The browser journal is not the source of truth for chain state.

@@ -43,6 +43,17 @@ describe('contract read boundary', () => {
     expect(await cache.get('same', loader)).toEqual({ value: 2 })
   })
 
+  it('does not let an invalidated in-flight read repopulate the cache', async () => {
+    const cache = new ReadCache()
+    let resolveStale: ((value: string) => void) | undefined
+    const stale = cache.get('same', () => new Promise<string>((resolve) => { resolveStale = resolve }))
+    cache.invalidate()
+    await expect(cache.get('same', async () => 'fresh')).resolves.toBe('fresh')
+    resolveStale?.('stale')
+    await stale
+    await expect(cache.get('same', async () => 'unexpected')).resolves.toBe('fresh')
+  })
+
   it('keeps argument serialization deterministic at the boundary', () => {
     expect(stableStringify({ b: 2, a: 1 })).toBe('{"a":1,"b":2}')
     expect(stableStringify([1n, '2'])).toBe('["1","2"]')
