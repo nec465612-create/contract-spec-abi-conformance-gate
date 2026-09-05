@@ -1,6 +1,6 @@
 # RPC budget matrix
 
-Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. The locked S0–S7 Studio matrix has one retained adapted run through S6 with five finalized transactions; only the bounded S7 read-only reconciliation remains. No deployment/create/write replay is permitted. Frontend release evidence remains intentionally pending Vercel E2E.
+Status: ADAPTED STUDIO E2E PASS. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. The locked S0–S7 Studio matrix passed with five finalized transactions and one bounded read-only reconciliation. No deployment/create/write replay occurred. Frontend release evidence remains intentionally pending Vercel E2E.
 
 Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`, implementation commit `cd833b78b43e22661ade6a4dddad3fc4269eb07a`, exact package HEAD is the value of `git rev-parse HEAD` at review time (self-binding; stale literal hashes are intentionally not used). Current runner identity is the SHA-256 of `probes/studio_rpc_run.mjs` at review time. Selected disposable Studio signer: `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (public address only). Adapted deployment address is `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D`; no deployment/create replay is permitted. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
 
@@ -15,11 +15,11 @@ STUDIO_E2E_STARTED_AT: 2026-09-05T20:17:30.019Z
 STUDIO_CAPABILITY_TOOL_OR_API: probes/studio_rpc_run.mjs global fetch instrumentation and operation ledger
 STUDIO_CAPABILITY_CHECK: node --check probes/studio_rpc_run.mjs plus static verification of global rpcRequests, requestSequence, operation ownership, per-row caps, immediate transaction retention and one-shot submission guard
 STUDIO_CAPABILITY_RESULT: every runner-visible Studio JSON-RPC action is assigned to one S0-S7 row; physical transport requests outside the instrument are not claimed
-STUDIO_PHYSICAL_COUNT_SOURCE: docs/evidence/studio-rpc-run-1788641657001.json
+STUDIO_PHYSICAL_COUNT_SOURCE: docs/evidence/studio-rpc-run-1788642516201.json
 STUDIO_PHYSICAL_COUNT_CLAIM: OBSERVABLE_LEDGER_ONLY
 STUDIO_REPLAY_FOR_MEASUREMENT: NO
 
-The mode was locked before the adapted-source Studio action. The retained run preserves every runner-visible request event, row count, transaction hash, bounded status check and terminal receipt. It made 49 observable requests and retained five hashes; S0–S6 are within cap and all events are operation-scoped. S4 replace and S5 freeze finalized with successful authoritative readbacks. S6 finalized as a consensus-agreed execution error whose leader receipt carries structured `rollback` / `STALE_REVISION`; the previous runner stopped before its unchanged-state readback because it required a literal `USER_ERROR` label. The current correction recognizes this explicit structured execution-error shape and adds a read-only S7-only reconciliation mode; it cannot replay any write.
+The mode was locked before the adapted-source Studio action. The final retained run preserves every runner-visible request event, row count, transaction hash, bounded status check and terminal receipt. It made 53 observable requests and retained five hashes; S0–S7 are within cap and all events are operation-scoped. S4 replace and S5 freeze finalized with successful authoritative readbacks. S6 finalized as a consensus-agreed execution error whose leader receipt carries structured `rollback` / `STALE_REVISION`; the corrected classifier preserves it as the expected negative control. S7 then reconciled the retained freeze hash with exactly four read-only requests and confirmed current and historical state. It cannot replay any write.
 
 ## Historical Studio RPC measurement capability classification
 
@@ -89,9 +89,9 @@ The adapted runner's explicit S0–S7 sequence is: disposable funding, chain/acc
 STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node probes/studio_rpc_run.mjs
 ```
 
-### Current adapted partial ledger
+### Current adapted final ledger
 
-The initial retained boundary is preserved in `docs/evidence/studio-rpc-run-1788639450020.json` (SHA-256 `CD5084333797668CA3C13852B51E859111E0C2E264B806A6A1544116FBA68C7C`) and the separate pre-continuation read-only reconciliation in `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (SHA-256 `A785FEE34E60495EB96B24589942195CC3184B1F18FA2DCA5C38C592DB1068B6`). The current retained continuation ledger is `docs/evidence/studio-rpc-run-1788641657001.json` (SHA-256 `C516A0E3F178AA99B5E936DFDA5F6729C23E0D6F3592E9CDF358BA79055187FA`). It has `requestSequence=49`, `transactionCount=5`, and status `BLOCKED` only because S6's structured execution-error receipt was not yet recognized by the runner; no duplicate write occurred.
+The initial retained boundary is preserved in `docs/evidence/studio-rpc-run-1788639450020.json` (SHA-256 `CD5084333797668CA3C13852B51E859111E0C2E264B806A6A1544116FBA68C7C`) and the separate pre-continuation read-only reconciliation in `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (SHA-256 `A785FEE34E60495EB96B24589942195CC3184B1F18FA2DCA5C38C592DB1068B6`). The superseded continuation ledger remains preserved in `docs/evidence/studio-rpc-run-1788641657001.json` (SHA-256 `C516A0E3F178AA99B5E936DFDA5F6729C23E0D6F3592E9CDF358BA79055187FA`). The final reconciled ledger is `docs/evidence/studio-rpc-run-1788642516201.json` (SHA-256 `A1F24BCF4B68C27DA942A389CEFC07DDDFB7166B4FB9250769E05627E307BBB7`) with `requestSequence=53`, `transactionCount=5`, and status `PASS`; no duplicate write occurred.
 
 | Operation | Planned maximum | Actual RPC count | Transaction hash | Terminal evidence |
 |---|---:|---:|---|---|
@@ -102,10 +102,11 @@ The initial retained boundary is preserved in `docs/evidence/studio-rpc-run-1788
 | S3-create-case1 | 14 | 8 | `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9` | FINALIZED MAJORITY_AGREE; read-only state reconciliation passed |
 | S4-replace-case1 | 14 | 10 | `0x1d119d3b7391b01f7e16c6c884e03945e557d92e49164ff9a1acf649e7d81a36` | FINALIZED MAJORITY_AGREE; current/history readbacks passed |
 | S5-freeze-case1 | 14 | 10 | `0xab999a2188b7e1f99adaea235fd771016164e12652619f7620d705662c8d0b5b` | FINALIZED MAJORITY_AGREE; DONE/CONFORMANT/IMPLEMENTS readbacks passed |
-| S6-stale-negative | 13 | 8 | `0xf8402587e60ae09f09331ed9770e5d6c1cea5653d15ae3149ad132b4a392e4b5` | FINALIZED MAJORITY_AGREE; execution ERROR with structured rollback `STALE_REVISION`; post-state readback deferred to S7 |
-| **Total** | — | **49** | **5 retained hashes** | **BLOCKED_PARTIAL; S7 read-only reconciliation review-gated** |
+| S6-stale-negative | 13 | 8 | `0xf8402587e60ae09f09331ed9770e5d6c1cea5653d15ae3149ad132b4a392e4b5` | FINALIZED MAJORITY_AGREE; expected execution ERROR with structured rollback `STALE_REVISION` |
+| S7-reconciliation | 4 | 4 | n/a | Receipt finalized; current revision 3 DONE/CONFORMANT, count 1, historical revision 1 preserved |
+| **Total** | — | **53** | **5 retained hashes** | **PASS; all 53 events operation-scoped and within cap** |
 
-The initial read-only boundary is [studio-adapted-partial-reconciliation-1788639450020.json](evidence/studio-adapted-partial-reconciliation-1788639450020.json). The S7-only continuation command, after targeted review of the classifier correction, must use `STUDIO_FINAL_RECONCILE=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN STUDIO_FINAL_EVIDENCE_PATH=studio-rpc-run-1788641657001.json`; it performs no write and never replays S2–S6.
+The initial read-only boundary is [studio-adapted-partial-reconciliation-1788639450020.json](evidence/studio-adapted-partial-reconciliation-1788639450020.json). The final S7-only evidence is [studio-rpc-run-1788642516201.json](evidence/studio-rpc-run-1788642516201.json); it performs no write and never replays S2–S6.
 
 ## Historical superseded-source runs (not current adapted source)
 

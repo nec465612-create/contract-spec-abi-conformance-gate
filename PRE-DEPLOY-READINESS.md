@@ -1,6 +1,6 @@
 # PRE_DEPLOY readiness
 
-Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL — the approved deterministic-freeze adaptation removes the LLM/validator operation that produced the historical S6 timeout. One exact adapted deployment, create, replace, freeze and stale-negative are finalized and retained; only the S7 read-only reconciliation remains after targeted review of the structured stale-error classifier. Historical Studio evidence is not reused as proof for this source; GitHub/Vercel publication and Vercel E2E have not started.
+Status: ADAPTED STUDIO E2E PASS — the approved deterministic-freeze adaptation removes the LLM/validator operation that produced the historical S6 timeout. One exact adapted deployment, create, replace and freeze, one expected stale-negative, and the bounded S7 read-only reconciliation are finalized and retained. Historical Studio evidence is not reused as proof for this source; exact POST_DEPLOY_TEST review, GitHub/Vercel publication, and Vercel E2E remain separate gates.
 
 ## Contract lifecycle classification
 
@@ -28,7 +28,7 @@ This classification is a release decision, not a claim that the contract survive
 | Studio deployer account | `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (offline-selected disposable signer; public address only) |
 | Studio role | Deployment/signing account only; no upgrade role |
 
-The prior addresses and transactions remain historical evidence for superseded source bytes only. The adapted deployment and subsequent exact-once writes above are not a release approval: S7 reconciliation, POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.
+The prior addresses and transactions remain historical evidence for superseded source bytes only. The adapted deployment and subsequent exact-once writes above are not a release approval: POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.
 
 The live deployment/readback ledger and the separate Studio/frontend RPC status are in [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and [`docs/RPC-BUDGET.md`](docs/RPC-BUDGET.md).
 
@@ -75,4 +75,4 @@ All rows are secret-free and must be executed only after anonymous `PRE_DEPLOY` 
 | S4 | Negative/no-write boundary | stale `replace_base(id, base, 2)` after revision `3` | Finalized expected `STALE_REVISION` execution error and unchanged authoritative state/history |
 | S5 | Read-only surface | `get_case`, `get_version`, `get_count`, paginated indexes | Exact canonical records and no mutation |
 
-The live matrix is evidence to be produced in `POST_DEPLOY_TEST`; this document is the PRE_DEPLOY plan and limitation disclosure, not live proof.
+The live matrix is preserved as PASS evidence in [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and [`docs/evidence/studio-rpc-run-1788642516201.json`](docs/evidence/studio-rpc-run-1788642516201.json). This document remains the PRE_DEPLOY plan and limitation disclosure; it does not itself grant POST_DEPLOY_TEST or release approval.
