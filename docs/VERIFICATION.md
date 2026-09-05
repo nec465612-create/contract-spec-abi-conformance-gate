@@ -48,7 +48,7 @@ The deployed Studio source was the exact reviewed contract source, including its
 - Contract tests: 15 passed with py -3.13 -m pytest probes/test_runtime_probe.py tests/test_contract.py -q -p no:cacheprovider.
 - GenVM lint: passed with PYTHONIOENCODING=utf-8 genvm-lint check contracts/main.py.
 - ABI generation: passed with genvm-lint schema contracts/main.py --output contract-schema.json; 12 public methods.
-- Frontend tests: 39 passed across 8 files with npm test -- --run from frontend.
+- Frontend tests: 41 passed across 9 files with npm test -- --run from frontend.
 - Frontend typecheck: passed with npm run typecheck.
 - Frontend production build: passed with npm run build; only the existing Vite chunk-size warning was emitted.
 - git diff --check: passed.
