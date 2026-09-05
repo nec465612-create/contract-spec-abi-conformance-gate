@@ -1,5 +1,5 @@
 import { TransactionStatus, type CalldataEncodable, type GenLayerTransaction, type TransactionHash } from 'genlayer-js/types'
-import { genlayerChain, getReadClient, getWriteClient, type ContractAddress } from './config'
+import { genlayerChain, getReadClient, getWriteClient, type ContractAddress, type GenLayerClient } from './config'
 import { classifyReceipt, isFinalizedReceipt, isTransactionHash, receiptStatus } from './receipt'
 import { JournalError, JournalStore, type JournalEntry } from '../persistence/journal'
 import type { Eip1193Provider } from '../wallet/types'
@@ -62,6 +62,34 @@ export class WriteCoordinatorError extends Error {
   constructor(readonly code: string, message: string) {
     super(message)
     this.name = 'WriteCoordinatorError'
+  }
+}
+
+/**
+ * GenLayerJS 1.1.8 can retry an ABI-mismatch by sending a second transaction.
+ * A wallet/provider send is not safely retryable: the first request may already
+ * have been accepted even when it returns an error. Fail closed on any second
+ * send and let the retained journal entry reconcile the first attempt.
+ */
+export async function withOneShotSubmission<T>(client: GenLayerClient, submit: () => Promise<T>): Promise<T> {
+  const originalRequest = client.request
+  let submissionAttempts = 0
+  client.request = (async (request: Parameters<typeof originalRequest>[0]) => {
+    const method = request && typeof request === 'object' && 'method' in request
+      ? (request as { method?: unknown }).method
+      : undefined
+    if (method === 'eth_sendTransaction' || method === 'eth_sendRawTransaction') {
+      submissionAttempts += 1
+      if (submissionAttempts > 1) {
+        throw new WriteCoordinatorError('MULTIPLE_SUBMISSION_ATTEMPT', 'The SDK attempted a second transaction submission; the write was stopped for reconciliation.')
+      }
+    }
+    return originalRequest.call(client, request)
+  }) as typeof client.request
+  try {
+    return await submit()
+  } finally {
+    client.request = originalRequest
   }
 }
 
@@ -146,12 +174,12 @@ export async function executeContractWrite<TReadback>(
   let hash: TransactionHash | undefined
   let submitted = false
   try {
-    const returned = await client.writeContract({
-      address: request.contract,
-      functionName: request.method,
-      args: request.args,
-      value: 0n,
-    })
+    const returned = await withOneShotSubmission(client, () => client.writeContract({
+        address: request.contract,
+        functionName: request.method,
+        args: request.args,
+        value: 0n,
+      }))
     if (!isTransactionHash(returned)) throw new Error('INVALID_TRANSACTION_HASH')
     hash = returned as TransactionHash
     await store.markSubmitted(entry, hash)

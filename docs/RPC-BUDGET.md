@@ -125,13 +125,13 @@ Scope: the released browser frontend. Counts below are per explicit user action 
 | F6 | Explicit journal reconciliation | one receipt lookup; required historical/semantic readback | recovery gateway invalidated before readback / 5s cache otherwise | 1 receipt + up to 2 readbacks | One explicit reconciliation; no duplicate submission; stop after authoritative result | 0 | `VERIFIED`, `FINALIZED_ERROR`, or retained `RECONCILIATION_REQUIRED` |
 | F7 | History / revision inspection | No public history polling UI is advertised in this release | n/a | 0 until a future explicit history control exists | If added, one explicit `get_version` click and its own evidence row are required | 0 | No hidden historical polling |
 
-The six-operation write budget is the normal logical budget from the governing frontend rule: one submission, three bounded finality queries, and at most two readbacks. Transient retry attempts are not free; they are counted in measured evidence, honor Retry-After, and terminate the journey before a duplicate write can occur.
+The six-operation write budget is the normal logical budget from the governing frontend rule: one submission, three bounded finality queries, and at most two readbacks. Transient retry attempts are not free; they are counted in measured evidence, honor Retry-After, and terminate the journey before a duplicate write can occur. The frontend write coordinator also installs a per-submission one-shot transport guard, so GenLayerJS ABI-mismatch fallback cannot issue a second wallet send; the retained journal entry remains the reconciliation boundary.
 
 ## FRONTEND RPC BUDGET EVIDENCE
 
 ### Current status
 
-No public release or Vercel browser run exists yet. Actual frontend RPC/provider counts are therefore NOT RUN BY DESIGN, not zero and not a pass. The source-level controls and regression tests are complete: one shared read client, FIFO read queue, cache and single-flight behavior, bounded 2/4/8-second finality checks, three-attempt transient retry budget, Retry-After handling, two-readback write budget, journal reconciliation, and no automatic landing-page chain read. The F0–F7 frontend matrix below remains the required measurement plan for Vercel E2E.
+No public release or Vercel browser run exists yet. Actual frontend RPC/provider counts are therefore NOT RUN BY DESIGN, not zero and not a pass. The source-level controls and regression tests are complete: one shared read client, FIFO read queue, cache and single-flight behavior, bounded 2/4/8-second finality checks, three-attempt transient retry budget, Retry-After handling, two-readback write budget, one-shot submission protection against SDK fallback, journal reconciliation, and no automatic landing-page chain read. The F0–F7 frontend matrix below remains the required measurement plan for Vercel E2E.
 
 ### PRE_DEPLOY evidence template (not run)
 
