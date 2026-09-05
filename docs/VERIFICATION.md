@@ -1,10 +1,28 @@
 # Live verification
 
-Status: POST_DEPLOY_TEST CHANGES REQUIRED. Studio execution/readbacks are complete, but the anonymous reviewer’s P0 Studio RPC measurement finding remains open; the Vercel browser run has not started.
+Status: POST_DEPLOY_TEST CHANGES REQUIRED. The historical frozen Studio UI ledger remains non-reconstructable and is not treated as a PASS. The current instrumented recovery is `BLOCKED_PARTIAL_CASE_ACCEPTED`; the one reviewed replacement attempt was rate-limited before deployment, and Vercel browser E2E has not started.
 
 Evidence date: 2026-09-05 (Asia/Saigon)
 
-## Exact binding
+## Current measured recovery status
+
+| Field | Value |
+|---|---|
+| Current evidence HEAD | `b99dd77d5dab7bd77909bd5a5e32bfee95bc6505` |
+| Current source commit | `de66367b459ed421b73bdfb7f3d04bf15088ed38` |
+| Current source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` |
+| Current Studio deployment | `0xa84f59Fb13056DF9707D4c0aaFFc730ec275afC5` |
+| Current deployment hash | `0xe2307ea2f953e61c8963cce50225b420b5908652622c7396524c5a7773372509` |
+| Current manifest | `BLOCKED_PARTIAL_CASE_ACCEPTED` |
+| Accepted case writes | create `0xea49bc...2ebef6`, replace `0x17fd39...eafe8` |
+| Current authoritative state | count `1`; case 1 revision `2`; `BASE_DRAFT`; last operation `replace_base` |
+| Replacement attempt | `studio-rpc-run-1788608380680.json`: S0-funding HTTP 429, 1 request, 0 transactions |
+| Post-cooldown sparse read | `studio-rpc-sparse-read-1788608456363.json`: 2 reads, no write |
+| Release boundary | No GitHub/Vercel publication or Vercel E2E has occurred |
+
+The accepted owner-bound case creator key was not retained, so the current deployment is never resumed. The one reviewed replacement attempt was not retried after `Retry-After: 31`; the post-cooldown sparse read confirmed the state above. Studio and frontend RPC ledgers remain separate.
+
+## Historical frozen UI binding (not current measured run)
 
 | Field | Value |
 |---|---|
@@ -33,7 +51,7 @@ The deployed Studio source was the exact reviewed contract source, including its
 - Frontend production build: passed with npm run build; only the existing Vite chunk-size warning was emitted.
 - git diff --check: passed.
 
-## Studio deployment and transaction ledger
+## Historical frozen UI transaction ledger (not current measured run)
 
 Explorer showed exactly 10 transactions for this contract: one deployment and nine calls. Each row below has a unique transaction hash. The deployment and every call reached FINALIZED; successful rows show GenVM SUCCESS and Accepted consensus. The negative stale-revision row intentionally shows GenVM ERROR with Accepted consensus and no state mutation.
 
@@ -50,7 +68,7 @@ Explorer showed exactly 10 transactions for this contract: one deployment and ni
 | S6-evaluate | evaluate_case case 2, expected revision 2 | https://explorer-studio.genlayer.com/tx/0x47ac017edabfd89ff30e06e1b0f8d4d18bacea6ee77ee5f54eb945cfb88f0750 | FINALIZED, GenVM SUCCESS, Accepted | Case 2 revision 3 UNRESOLVED, UNKNOWN, accepted_attempts 1 |
 | S6-retry | retry_case case 2, expected revision 3, after the 60-second cooldown | https://explorer-studio.genlayer.com/tx/0x6e1d187eb44b667cd333ab8409d45ae4353a9a422b167de4854ab5a895e0e229 | FINALIZED, GenVM SUCCESS, Accepted | Case 2 revision 4 UNRESOLVED, UNKNOWN, accepted_attempts 2 |
 
-## Readback and no-write proof
+## Historical frozen UI readback and no-write proof (not current measured run)
 
 The final read-only Studio surface used the Finalized state selector. It returned:
 
@@ -84,4 +102,4 @@ The retained reviewer report identified RPC-STUDIO-001 as a blocking missing str
 
 No API key was available, no Reset Storage action was executed, and no disposable deployment was submitted because the Studio service remained rate-limited before a clean measured S0/S1 run could begin. The original contract address remains read-only evidence only. This audit does not close RPC-STUDIO-001; it records why replaying or fabricating counts would violate the RPC-economy rule.
 
-This document is evidence for the retained exact source, the completed Studio deployment/E2E, and the planned frontend release measurements. It is not a Vercel E2E result, GitHub/Vercel final approval, or Explorer submission approval.
+This document preserves the historical frozen Studio deployment/E2E ledger, the current instrumented recovery evidence, and the planned frontend release measurements. It is not a current Studio E2E PASS, Vercel E2E result, GitHub/Vercel final approval, or Explorer submission approval.
