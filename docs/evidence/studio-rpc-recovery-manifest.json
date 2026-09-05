@@ -48,6 +48,24 @@
     "stateReadback": "case count 1; revision 2; BASE_DRAFT; last operation replace_base",
     "ownerKeyRecovery": "not retained"
   },
+  "latestReplacementAttempt": {
+    "status": "BLOCKED",
+    "account": "0x1b27A617565E1A27f380ef82233bf65915B724Bd",
+    "requestSequence": 1,
+    "transactionCount": 0,
+    "blockedAt": "S0-funding",
+    "retryAfterSeconds": 31,
+    "error": "The one reviewed replacement attempt was blocked at sim_fundAccount by HTTP 429; no replacement deployment or state-changing transaction was submitted.",
+    "fullEvidenceFile": "studio-rpc-run-1788608380680.json",
+    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788608456363.json",
+    "sparseAuthoritativeRead": {
+      "methods": ["get_count", "get_case"],
+      "caseCount": "1",
+      "case1Revision": "2",
+      "case1Phase": "BASE_DRAFT",
+      "case1LastOperation": "replace_base"
+    }
+  },
   "supersededRecovery": {
     "status": "BLOCKED_PARTIAL_CASE_ACCEPTED",
     "deploymentHash": "0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84",
