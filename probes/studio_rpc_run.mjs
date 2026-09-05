@@ -152,6 +152,17 @@ try {
   if (!RESUME_MODE && !RESTART_MODE) {
     try {
       const existingManifest = JSON.parse(await readFile(RESUME_MANIFEST_PATH, 'utf8'))
+      if (
+        !existingManifest ||
+        typeof existingManifest !== 'object' ||
+        Array.isArray(existingManifest) ||
+        typeof existingManifest.sourceCommit !== 'string' ||
+        !/^[0-9a-fA-F]{40}$/.test(existingManifest.sourceCommit) ||
+        typeof existingManifest.sourceSha256 !== 'string' ||
+        !/^[0-9a-fA-F]{64}$/.test(existingManifest.sourceSha256)
+      ) {
+        throw new Error('Existing recovery manifest has an invalid source binding; refusing to classify or reuse it.')
+      }
       if (existingManifest.sourceCommit === EXPECTED_SOURCE_COMMIT && existingManifest.sourceSha256 === EXPECTED_SOURCE_SHA256) {
         throw new Error('A finalized partial deployment manifest exists for the current source; refusing a second deployment. Use the approved resume or explicit partial-run restart mode.')
       }
