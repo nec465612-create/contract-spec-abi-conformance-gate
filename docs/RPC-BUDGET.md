@@ -2,7 +2,7 @@
 
 Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. The locked S0–S7 Studio matrix has one retained adapted run through S3; continuation is review-gated and must not replay deployment/create. Frontend release evidence remains intentionally pending Vercel E2E.
 
-Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`, implementation commit `cd833b78b43e22661ade6a4dddad3fc4269eb07a`, exact package HEAD `897fa347e1e381290feee70e6bed79b9b3febf34`. Selected disposable Studio signer: `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (public address only). Adapted deployment address is `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D`; no deployment/create replay is permitted. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
+Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`, implementation commit `cd833b78b43e22661ade6a4dddad3fc4269eb07a`, exact package HEAD `f32b10a882def591a00f11a4a96ae804ca7398d9`. Selected disposable Studio signer: `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (public address only). Adapted deployment address is `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D`; no deployment/create replay is permitted. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
 
 ## STUDIO RPC MEASUREMENT CAPABILITY PROBE — adapted source
 
