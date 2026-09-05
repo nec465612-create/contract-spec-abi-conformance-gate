@@ -12,8 +12,9 @@ export interface ContractWriteRequest<TReadback> {
   args: CalldataEncodable[]
   intent: string
   preRevision: string
-  preHash: `0x${string}`
+  preHash: string
   readback: () => Promise<TReadback>
+  failureReadback?: () => Promise<void>
   onPhase?: (phase: 'SIGNING' | 'SUBMITTED' | 'FINALITY' | 'READBACK') => void
 }
 
@@ -53,6 +54,39 @@ function safeErrorMessage(error: unknown): string {
   return 'The transaction could not be verified. It remains available for reconciliation.'
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+}
+
+function finalized(receipt: GenLayerTransaction): boolean {
+  return receipt.statusName === TransactionStatus.FINALIZED || receipt.status === TransactionStatus.FINALIZED || receipt.status === 7
+}
+
+/**
+ * Uses the current SDK's lightweight transaction read with a bounded 2/4/8-second
+ * schedule. It deliberately does not use an unbounded SDK poller.
+ */
+async function waitForFinality(hash: TransactionHash): Promise<GenLayerTransaction> {
+  const client = getReadClient()
+  let last: GenLayerTransaction | undefined
+  for (const delay of [2_000, 4_000, 8_000]) {
+    await sleep(delay)
+    last = await client.getTransaction({ hash })
+    if (finalized(last)) return last
+    if (last.statusName === TransactionStatus.CANCELED || last.statusName === TransactionStatus.VALIDATORS_TIMEOUT || last.statusName === TransactionStatus.LEADER_TIMEOUT) return last
+  }
+  throw new WriteCoordinatorError('FINALITY_UNCERTAIN', last ? `The transaction remains ${last.statusName ?? 'pending'} after bounded checks.` : 'The transaction remains pending after bounded checks.')
+}
+
+async function preserveUncertain(store: JournalStore, entry: JournalEntry): Promise<void> {
+  try {
+    const current = store.find(entry.reservation)
+    if (current.status === 'SIGNING' || current.status === 'SUBMITTED') await store.markReconcile(current)
+  } catch {
+    // A storage outage must not cause an automatic second wallet submission.
+  }
+}
+
 export async function executeContractWrite<TReadback>(
   store: JournalStore,
   request: ContractWriteRequest<TReadback>,
@@ -70,7 +104,8 @@ export async function executeContractWrite<TReadback>(
   const client = getWriteClient(request.provider, request.account)
   request.onPhase?.('SIGNING')
 
-  let hash: TransactionHash
+  let hash: TransactionHash | undefined
+  let submitted = false
   try {
     const returned = await client.writeContract({
       address: request.contract,
@@ -81,31 +116,34 @@ export async function executeContractWrite<TReadback>(
     if (!isTransactionHash(returned)) throw new Error('INVALID_TRANSACTION_HASH')
     hash = returned as TransactionHash
     await store.markSubmitted(entry, hash)
+    submitted = true
     request.onPhase?.('SUBMITTED')
   } catch (error) {
-    try {
-      if (userRejected(error)) await store.markFinalizedError(entry)
-      else await store.markReconcile(entry)
-    } catch {
-      // Preserve the original user-facing failure; the recovery journal will fail closed on next load if needed.
+    if (userRejected(error) && !hash) {
+      try {
+        await store.removeUnsigned(entry)
+      } catch {
+        throw new WriteCoordinatorError('JOURNAL_CLEANUP_FAILED', 'The wallet request was cancelled, but local recovery could not be updated. Do not retry until the journal is reviewed.')
+      }
+      throw new WriteCoordinatorError('USER_REJECTED', 'The wallet request was cancelled.')
     }
-    throw new WriteCoordinatorError(userRejected(error) ? 'USER_REJECTED' : 'SUBMISSION_UNCERTAIN', safeErrorMessage(error))
+    // A hash returned by the wallet is evidence even if the first local write
+    // failed. Preserve it before leaving the submission path.
+    if (hash && !submitted) {
+      try { await store.markReconcile(entry, hash) } catch { /* keep the original uncertainty visible */ }
+    }
+    await preserveUncertain(store, entry)
+    throw new WriteCoordinatorError('SUBMISSION_UNCERTAIN', safeErrorMessage(error))
   }
+
+  if (!hash) throw new WriteCoordinatorError('SUBMISSION_UNCERTAIN', 'The wallet did not return a transaction hash.')
 
   let receipt: GenLayerTransaction
   try {
     request.onPhase?.('FINALITY')
-    receipt = await client.waitForTransactionReceipt({
-      hash,
-      status: TransactionStatus.FINALIZED,
-      interval: 1_000,
-      retries: 120,
-    })
+    receipt = await waitForFinality(hash)
   } catch (error) {
-    const current = store.find(entry.reservation)
-    if (current.status !== 'RECONCILE') {
-      try { await store.markReconcile(current) } catch { /* retain existing pending evidence */ }
-    }
+    await preserveUncertain(store, entry)
     throw new WriteCoordinatorError('FINALITY_UNCERTAIN', safeErrorMessage(error))
   }
 
@@ -113,7 +151,13 @@ export async function executeContractWrite<TReadback>(
   if (!classified.ok) {
     const current = store.find(entry.reservation)
     if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') {
-      await store.markFinalizedError(current)
+      try {
+        await request.failureReadback?.()
+        await store.markFinalizedError(store.find(entry.reservation))
+      } catch {
+        await preserveUncertain(store, entry)
+        throw new WriteCoordinatorError('FINALIZED_ERROR_READBACK_UNCERTAIN', 'The transaction failed at finality, but its pre-state could not be authoritatively checked. The record remains blocked.')
+      }
     } else {
       await store.markReconcile(current)
     }
@@ -127,10 +171,7 @@ export async function executeContractWrite<TReadback>(
     const verified = await store.markVerified(current)
     return { hash, receipt, readback, journal: verified }
   } catch (error) {
-    const current = store.find(entry.reservation)
-    if (current.status !== 'RECONCILE') {
-      try { await store.markReconcile(current) } catch { /* keep hash for deliberate retry */ }
-    }
+    await preserveUncertain(store, entry)
     throw new WriteCoordinatorError('READBACK_UNCERTAIN', safeErrorMessage(error))
   }
 }
@@ -140,7 +181,9 @@ export async function reconcileJournalEntry<TReadback>(
   entry: JournalEntry,
   readback: () => Promise<TReadback>,
   onPhase?: (phase: 'FINALITY' | 'READBACK') => void,
+  failureReadback?: () => Promise<void>,
 ): Promise<ReconciliationResult<TReadback>> {
+  if (entry.chain !== String(genlayerChain.id)) throw new WriteCoordinatorError('OLD_CONTEXT_READONLY', 'This pending action belongs to another network context and remains read-only.')
   if (!isTransactionHash(entry.tx_hash)) throw new WriteCoordinatorError('NO_TRANSACTION_HASH', 'This pending action has no transaction hash to reconcile.')
   const current = store.find(entry.reservation)
   if (current.status === 'VERIFIED' || current.status === 'FINALIZED_ERROR') throw new WriteCoordinatorError('TERMINAL_JOURNAL_ENTRY', 'This action is already closed.')
@@ -148,19 +191,22 @@ export async function reconcileJournalEntry<TReadback>(
   let receipt: GenLayerTransaction
   try {
     onPhase?.('FINALITY')
-    receipt = await getReadClient().waitForTransactionReceipt({
-      hash: entry.tx_hash as TransactionHash,
-      status: TransactionStatus.FINALIZED,
-      interval: 1_000,
-      retries: 120,
-    })
+    receipt = await getReadClient().getTransaction({ hash: entry.tx_hash as TransactionHash })
   } catch {
     throw new WriteCoordinatorError('FINALITY_UNCERTAIN', 'The transaction is still awaiting authoritative finality.')
   }
 
   const classified = classifyReceipt(receipt)
   if (!classified.ok) {
-    if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') await store.markFinalizedError(current)
+    if (classified.kind === 'execution-failed' || classified.kind === 'consensus-failed') {
+      try {
+        await failureReadback?.()
+        await store.markFinalizedError(store.find(entry.reservation))
+      } catch {
+        await preserveUncertain(store, entry)
+        throw new WriteCoordinatorError('FINALIZED_ERROR_READBACK_UNCERTAIN', 'The transaction failed at finality, but its pre-state could not be authoritatively checked. The record remains blocked.')
+      }
+    }
     throw new WriteCoordinatorError(classified.kind.toUpperCase(), classified.message)
   }
 
@@ -170,15 +216,13 @@ export async function reconcileJournalEntry<TReadback>(
     const verified = await store.markVerified(store.find(entry.reservation))
     return { hash: entry.tx_hash as `0x${string}`, receipt, readback: result, journal: verified }
   } catch {
-    const latest = store.find(entry.reservation)
-    if (latest.status !== 'RECONCILE') {
-      try { await store.markReconcile(latest) } catch { /* preserve the hash for the next deliberate attempt */ }
-    }
+    await preserveUncertain(store, entry)
     throw new WriteCoordinatorError('READBACK_UNCERTAIN', 'The transaction finalized, but its authoritative state is not visible yet.')
   }
 }
 
-export function writeIntent(method: string, caseId: string | null, nonce: string | null): string {
-  const value = caseId ? `case:${caseId}:${method}` : `create:${nonce ?? ''}`
-  return value.slice(0, 160)
+export function writeIntent(method: string, caseId: string | null, expectedRevision: string | null, account: string | null, nonce: string | null): string {
+  if (caseId && expectedRevision) return `${method}:${caseId}:${expectedRevision}`
+  if (account && nonce) return `create:${account.toLowerCase()}:${nonce}`
+  throw new Error('INVALID_WRITE_INTENT')
 }

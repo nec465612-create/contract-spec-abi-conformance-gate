@@ -49,16 +49,16 @@ export function jsonSafe(value: unknown): unknown {
   return value
 }
 
-export async function sha256Hex(value: string): Promise<`0x${string}`> {
+export async function sha256Hex(value: string): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error('CRYPTO_UNAVAILABLE')
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
-  return `0x${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export function randomHex32(): `0x${string}` {
+export function randomHex16(): string {
   if (!globalThis.crypto?.getRandomValues) throw new Error('CRYPTO_UNAVAILABLE')
-  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32))
-  return `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
