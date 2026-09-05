@@ -1,0 +1,36 @@
+{
+  "status": "VIEW_DIAGNOSTIC_RETURNED",
+  "kind": "READ_ONLY_GEN_CALL",
+  "timestamp": "2026-09-05T14:28:44.732Z",
+  "endpoint": "https://studio.genlayer.com/api",
+  "chainId": 61999,
+  "contract": "0x976E9e852C00FAbB4137DeaC50e475DE01B3A1F1",
+  "functionName": "get_case",
+  "args": ["1"],
+  "requestCount": 1,
+  "request": {
+    "ordinal": 1,
+    "jsonRpcMethod": "gen_call",
+    "callType": "read",
+    "httpStatus": 200,
+    "rpcError": null,
+    "deadlineMs": 20000,
+    "retryCount": 0,
+    "fallbackPayloads": 0
+  },
+  "resultSummary": {
+    "id": "1",
+    "revision": "3",
+    "phase": "FROZEN",
+    "accepted_attempts": 0,
+    "last_operation": "freeze_case",
+    "base_locked": true,
+    "response_locked": true,
+    "outcome": ""
+  },
+  "transactionCount": 0,
+  "stateChangingRequests": 0,
+  "outOfBand": true,
+  "usedForReleaseAuthorization": false,
+  "note": "One bounded view-only read corroborates the sparse authoritative state. It does not override the retained FINALIZED/TIMEOUT evaluation, the health readiness predicate, PRE_DEPLOY, POST_DEPLOY_TEST, or release authorization."
+}

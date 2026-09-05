@@ -80,6 +80,8 @@ After that terminal evidence, one separate read-only `gen_getTransactionStatus` 
 
 A bounded follow-up read-only compatibility diagnostic is preserved in [studio-rpc-status-string-compat-1788618280.json](evidence/studio-rpc-status-string-compat-1788618280.json). Sending the retained hash as the documented method's string-shaped parameter returned HTTP 200 and `FINALIZED`; the unavailable lifecycle method returned `-32601`. This resolves the payload-shape ambiguity without a write, retry, appeal, or alternate lifecycle action. It is out-of-band diagnostic evidence: zero state-changing requests, not part of the S0–S12 total, and not release authorization.
 
+The reviewer-scoped view diagnostic is preserved in [studio-view-diagnostic-1788618524737.json](evidence/studio-view-diagnostic-1788618524737.json). It made exactly one bounded `gen_call` read for `get_case(1)`, returned HTTP 200, and corroborated the sparse state at revision `3` / `FROZEN` with `accepted_attempts=0`; transaction count and state-changing request count were both zero. An exploratory state-method simulation is separately marked excluded in [studio-gen-call-excluded-simulation-1788618468466.json](evidence/studio-gen-call-excluded-simulation-1788618468466.json) and is not part of any budget or gate.
+
 The earlier rate-limited replacement attempt remains retained as `studio-rpc-run-1788608380680.json`: S0-funding `1/1`, request sequence `1`, transaction count `0`, and no deployment or case write. Its separate sparse read confirmed the prior deployment state. It was not retried automatically.
 
 ### Historical frozen UI status (not the new measured run)
