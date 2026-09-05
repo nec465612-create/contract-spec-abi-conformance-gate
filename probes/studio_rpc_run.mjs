@@ -12,14 +12,13 @@ const EXACT_STUDIO_RPC_ENDPOINT = 'https://studio.genlayer.com/api'
 const requestedEndpoint = process.env.STUDIO_RPC_ENDPOINT
 const ENDPOINT = EXACT_STUDIO_RPC_ENDPOINT
 const EXPECTED_SOURCE_COMMIT = 'de66367b459ed421b73bdfb7f3d04bf15088ed38'
-const EXPECTED_SOURCE_SHA256 = 'AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45'
+const EXPECTED_SOURCE_SHA256 = 'E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F'
 const RESUME_MANIFEST_PATH = resolve(ROOT, 'docs/evidence/studio-rpc-recovery-manifest.json')
 const RUN_CONFIRM = 'CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN'
 const STATUS_SCHEDULE_SECONDS = [10, 20, 40, 80]
 const MAX_STATUS_CHECKS = STATUS_SCHEDULE_SECONDS.length
 const REQUEST_TIMEOUT_MS = 30_000
 const OPERATION_TIMEOUT_MS = 240_000
-const MAX_COOLDOWN_WAIT_MS = 120_000
 const OPERATION_REQUEST_CAPS = Object.freeze({
   'S0-funding': 1,
   'S0-preflight': 2,
@@ -28,13 +27,8 @@ const OPERATION_REQUEST_CAPS = Object.freeze({
   'S3-create-case1': 14,
   'S4-replace-case1': 14,
   'S5-freeze-case1': 14,
-  'S6-evaluate-case1': 13,
-  'S7-stale-negative': 13,
-  'S8-create-case2': 14,
-  'S9-freeze-case2': 13,
-  'S10-evaluate-case2': 13,
-  'S11-retry-case2': 15,
-  'S12-reconciliation': 4,
+  'S6-stale-negative': 13,
+  'S7-reconciliation': 4,
 })
 
 const operations = []
@@ -57,19 +51,11 @@ let approvedDeploymentAccount = null
 let approvedDeploymentEvidence = null
 
 const base1 = {
-  requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
+  requirements: [{ id: 'read', text: 'Expose this exact read operation', polarity: 'REQUIRED', signature: 'check()->():view' }],
   abi: [{ type: 'function', name: 'check', inputs: [], outputs: [], stateMutability: 'view' }],
 }
 const base2 = {
-  requirements: [{ id: 'read', text: 'Expose a stable read operation', polarity: 'REQUIRED' }],
-  abi: [{ type: 'function', name: 'check_v2', inputs: [], outputs: [], stateMutability: 'view' }],
-}
-const unknownBase = {
-  requirements: [{
-    id: 'unknown',
-    text: 'Determine whether this contract satisfies a private external policy that is not provided in the input or represented by the ABI; the available data is intentionally insufficient.',
-    polarity: 'REQUIRED',
-  }],
+  requirements: [{ id: 'read', text: 'Expose this exact stable read operation', polarity: 'REQUIRED', signature: 'check_v2()->():view' }],
   abi: [{ type: 'function', name: 'check_v2', inputs: [], outputs: [], stateMutability: 'view' }],
 }
 
@@ -199,7 +185,7 @@ try {
       deploymentRow?.deployedSha256 !== EXPECTED_SOURCE_SHA256 ||
       deploymentRow?.transaction?.statusName !== 'FINALIZED' ||
       schemaOperation?.status !== 'PASS' ||
-      schemaOperation?.result?.methodCount !== 12
+      schemaOperation?.result?.methodCount !== 10
     ) {
       throw new Error('Resume deployment evidence does not prove the approved finalized source binding.')
     }
@@ -487,22 +473,10 @@ function installOneShotSubmissionGuard(client) {
   }
 }
 
-function cooldownDelay(record) {
-  const raw = record?.last_accepted_at
-  if (!/^\d+$/.test(String(raw))) throw new Error(`Invalid last_accepted_at: ${raw}`)
-  const acceptedAtSeconds = Number(raw)
-  if (!Number.isSafeInteger(acceptedAtSeconds) || acceptedAtSeconds <= 0) throw new Error(`Invalid last_accepted_at: ${raw}`)
-  const targetMs = acceptedAtSeconds * 1000 + 60_000 + 2_000
-  const delay = targetMs - Date.now()
-  if (delay > MAX_COOLDOWN_WAIT_MS) throw new Error(`Cooldown exceeds ${MAX_COOLDOWN_WAIT_MS}ms: ${delay}ms`)
-  return Math.max(0, delay)
-}
-
 const account = createAccount()
 const client = createClient({ chain: studionet, endpoint: ENDPOINT, account })
 installOneShotSubmissionGuard(client)
 const nonce1 = 'c0f03716fea36fa4643b82f9bde0faf0'
-const nonce2 = '6c4158ea665e0aa601a5d0189180473e'
 
 try {
   await operation('S0-funding', 'fund one disposable account exactly once', async () => {
@@ -519,7 +493,7 @@ try {
   await operation('S1-schema', RESUME_MODE ? 'reuse the approved source/schema binding without another RPC' : 'verify exact source schema once before deployment', async () => {
     if (RESUME_MODE) return { reusedFinalizedEvidence: true, skippedRpc: true }
     const schema = await client.getContractSchemaForCode(source)
-    assert(Object.keys(schema.methods).length === 12, `Expected 12 methods, got ${Object.keys(schema.methods).length}`)
+    assert(Object.keys(schema.methods).length === 10, `Expected 10 methods, got ${Object.keys(schema.methods).length}`)
     return { methodCount: Object.keys(schema.methods).length, methodNames: Object.keys(schema.methods).sort() }
   })
 
@@ -592,87 +566,28 @@ try {
     assert(isExecutionSuccess(transaction), `freeze_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     const historical = parseCase(await readContract(client, contractAddress, 'get_version', [1n, 2n]))
-    assert(current.revision === '3' && current.phase === 'FROZEN' && historical.revision === '2', 'freeze_case readback mismatch')
+    assert(current.revision === '3' && current.phase === 'DONE' && current.outcome === 'CONFORMANT' && current.result?.labels?.[0] === 'IMPLEMENTS' && historical.revision === '2', 'freeze_case deterministic readback mismatch')
     return { hash, transaction, readback: { current, historical } }
   })
 
-  const evaluate = await operation('S6-evaluate-case1', 'one unique evaluate_case write plus semantic readback', async () => {
-    const hash = await client.writeContract({ account, address: contractAddress, functionName: 'evaluate_case', args: [1n, 3n], value: 0n })
-    const txRow = retainTransaction('S6-evaluate-case1', hash)
-    const transaction = await waitForFinalized(client, 'S6-evaluate-case1', hash)
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
-    assert(isExecutionSuccess(transaction), `evaluate_case failed: ${JSON.stringify(jsonSafe(transaction))}`)
-    const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
-    assert(current.revision === '4' && current.phase === 'DONE' && current.outcome === 'CONFORMANT' && current.result?.labels?.[0] === 'IMPLEMENTS', 'evaluate_case semantic readback mismatch')
-    return { hash, transaction, readback: current }
-  })
-
-  const stale = await operation('S7-stale-negative', 'one unique stale negative write plus unchanged-state readback', async () => {
-    const hash = await client.writeContract({ account, address: contractAddress, functionName: 'replace_base', args: [1n, JSON.stringify(base2), 3n], value: 0n })
-    const txRow = retainTransaction('S7-stale-negative', hash)
-    const transaction = await waitForFinalized(client, 'S7-stale-negative', hash)
+  const stale = await operation('S6-stale-negative', 'one unique stale negative write plus unchanged-state readback', async () => {
+    const hash = await client.writeContract({ account, address: contractAddress, functionName: 'replace_base', args: [1n, JSON.stringify(base2), 2n], value: 0n })
+    const txRow = retainTransaction('S6-stale-negative', hash)
+    const transaction = await waitForFinalized(client, 'S6-stale-negative', hash)
     Object.assign(txRow, { transaction: jsonSafe(transaction) })
     assert(isFinalized(transaction) && isExecutionError(transaction) && hasExpectedStaleError(transaction), `stale negative did not finalize as USER_ERROR STALE_REVISION: ${JSON.stringify(jsonSafe(transaction))}`)
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
-    assert(current.revision === '4', 'stale negative changed current state')
+    assert(current.revision === '3', 'stale negative changed current state')
     Object.assign(txRow, { expectedError: 'USER_ERROR STALE_REVISION' })
     return { hash, transaction, readback: current }
   })
 
-  const create2 = await operation('S8-create-case2', 'one unique unknown-fixture create_case write plus two readbacks', async () => {
-    const hash = await client.writeContract({ account, address: contractAddress, functionName: 'create_case', args: [nonce2, JSON.stringify(unknownBase), 0n], value: 0n })
-    const txRow = retainTransaction('S8-create-case2', hash)
-    const transaction = await waitForFinalized(client, 'S8-create-case2', hash)
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
-    assert(isExecutionSuccess(transaction), `case2 create failed: ${JSON.stringify(jsonSafe(transaction))}`)
-    const id = await readContract(client, contractAddress, 'get_id_by_nonce', [account.address, nonce2])
-    const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
-    assert(String(id) === '2' && record.revision === '1' && record.phase === 'BASE_DRAFT', 'case2 create readback mismatch')
-    return { hash, transaction, readback: { id, record } }
-  })
-
-  const freeze2 = await operation('S9-freeze-case2', 'one unique freeze_case write plus semantic phase readback', async () => {
-    const hash = await client.writeContract({ account, address: contractAddress, functionName: 'freeze_case', args: [2n, 1n], value: 0n })
-    const txRow = retainTransaction('S9-freeze-case2', hash)
-    const transaction = await waitForFinalized(client, 'S9-freeze-case2', hash)
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
-    assert(isExecutionSuccess(transaction), `case2 freeze failed: ${JSON.stringify(jsonSafe(transaction))}`)
-    const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
-    assert(record.revision === '2' && record.phase === 'FROZEN', 'case2 freeze readback mismatch')
-    return { hash, transaction, readback: record }
-  })
-
-  const evaluate2 = await operation('S10-evaluate-case2', 'one unique unknown evaluate_case write plus semantic readback', async () => {
-    const hash = await client.writeContract({ account, address: contractAddress, functionName: 'evaluate_case', args: [2n, 2n], value: 0n })
-    const txRow = retainTransaction('S10-evaluate-case2', hash)
-    const transaction = await waitForFinalized(client, 'S10-evaluate-case2', hash)
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
-    assert(isExecutionSuccess(transaction), `case2 evaluate failed: ${JSON.stringify(jsonSafe(transaction))}`)
-    const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
-    assert(record.revision === '3' && record.phase === 'UNRESOLVED' && record.outcome === 'UNRESOLVED' && record.result?.labels?.[0] === 'UNKNOWN', 'case2 unknown readback mismatch')
-    return { hash, transaction, readback: record }
-  })
-
-  const retry = await operation('S11-retry-case2', 'one cooldown read, bounded wait, retry write, and semantic readback', async () => {
-    const case2Record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
-    const cooldownMs = cooldownDelay(parseCase(case2Record))
-    await waitBounded(cooldownMs)
-    const hash = await client.writeContract({ account, address: contractAddress, functionName: 'retry_case', args: [2n, 3n], value: 0n })
-    const txRow = retainTransaction('S11-retry-case2', hash)
-    const transaction = await waitForFinalized(client, 'S11-retry-case2', hash)
-    Object.assign(txRow, { transaction: jsonSafe(transaction) })
-    assert(isExecutionSuccess(transaction), `case2 retry failed: ${JSON.stringify(jsonSafe(transaction))}`)
-    const record = parseCase(await readContract(client, contractAddress, 'get_case', [2n]))
-    assert(record.revision === '4' && record.phase === 'UNRESOLVED' && record.outcome === 'UNRESOLVED' && record.accepted_attempts === 2 && record.result?.labels?.[0] === 'UNKNOWN', 'case2 retry readback mismatch')
-    return { hash, cooldownMs, transaction, readback: record }
-  })
-
-  const reconciliation = await operation('S12-reconciliation', 'one explicit retained-hash receipt lookup and three authoritative readbacks', async () => {
-    const receipt = await client.getTransaction({ hash: evaluate.hash })
+  const reconciliation = await operation('S7-reconciliation', 'one explicit retained-hash receipt lookup and three authoritative readbacks', async () => {
+    const receipt = await client.getTransaction({ hash: freeze.hash })
     const current = parseCase(await readContract(client, contractAddress, 'get_case', [1n]))
     const count = await readContract(client, contractAddress, 'get_count', [])
     const historical = parseCase(await readContract(client, contractAddress, 'get_version', [1n, 1n]))
-    assert(isFinalized(receipt) && current.revision === '4' && String(count) === '2' && historical.revision === '1', 'reconciliation readback mismatch')
+    assert(isFinalized(receipt) && current.revision === '3' && current.phase === 'DONE' && current.outcome === 'CONFORMANT' && String(count) === '1' && historical.revision === '1', 'reconciliation readback mismatch')
     return { receipt, readback: { current, count, historical } }
   })
 
@@ -680,7 +595,7 @@ try {
   assert(allEvents.every((event) => event.operation && event.operation !== 'unscoped'), 'Unscoped RPC event present')
   assert(operations.every((item) => item.requestCount <= item.maxRequests && item.budgetWithinCap && item.allEventsRetained), 'Operation RPC cap/evidence invariant failed')
   assert(operations.reduce((sum, item) => sum + item.requestCount, 0) === requestSequence, 'Operation count does not equal global request sequence')
-  assert(txs.length === 10 && txs.every((item) => /^0x[0-9a-fA-F]{64}$/.test(item.hash)), `Expected 10 retained transaction hashes, got ${txs.length}`)
+  assert(txs.length === 5 && txs.every((item) => /^0x[0-9a-fA-F]{64}$/.test(item.hash)), `Expected 5 retained transaction hashes, got ${txs.length}`)
   const evidence = {
     status: 'PASS',
     exactSourceCommit: EXPECTED_SOURCE_COMMIT,
@@ -700,7 +615,6 @@ try {
     operationRequestCaps: OPERATION_REQUEST_CAPS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     operationTimeoutMs: OPERATION_TIMEOUT_MS,
-    maxCooldownWaitMs: MAX_COOLDOWN_WAIT_MS,
     reconciliation,
     generatedAt: new Date().toISOString(),
   }
@@ -711,7 +625,6 @@ try {
   evidence.operationRequestCaps = OPERATION_REQUEST_CAPS
   evidence.requestTimeoutMs = REQUEST_TIMEOUT_MS
   evidence.operationTimeoutMs = OPERATION_TIMEOUT_MS
-  evidence.maxCooldownWaitMs = MAX_COOLDOWN_WAIT_MS
   const outputPath = await writeEvidenceFile(evidence)
   console.error(JSON.stringify({ status: evidence.status, outputPath, contractAddress, account: account.address, transactionCount: txs.length, error: evidence.error }, null, 2))
   process.exitCode = 1

@@ -8,6 +8,7 @@ export interface Requirement {
   id: string
   text: string
   polarity: 'REQUIRED' | 'FORBIDDEN'
+  signature: string
 }
 
 export interface BaseSpec {
@@ -37,8 +38,6 @@ export interface CaseRecord {
   response: Record<string, unknown>
   base_locked: boolean
   response_locked: boolean
-  accepted_attempts: number
-  last_accepted_at: string
   outcome: string
   result: Record<string, unknown>
   domain: Record<string, unknown>
@@ -265,12 +264,71 @@ function callableEntry(value: unknown): { key: string; signature: string } | nul
   throw new Error('BASE_SPEC_INVALID')
 }
 
+function splitTypes(value: string): string[] {
+  if (value === '') return []
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '(') depth += 1
+    else if (value[index] === ')') depth -= 1
+    else if (value[index] === ',' && depth === 0) {
+      parts.push(value.slice(start, index))
+      start = index + 1
+    }
+    if (depth < 0) throw new Error('BASE_SPEC_INVALID')
+  }
+  parts.push(value.slice(start))
+  if (depth !== 0 || parts.some((part) => part === '')) throw new Error('BASE_SPEC_INVALID')
+  return parts
+}
+
+function validateCanonicalType(value: string, depth = 0): void {
+  if (depth > 4 || value === '') throw new Error('BASE_SPEC_INVALID')
+  let suffixStart = value.length
+  if (value.startsWith('(')) {
+    let nesting = 0
+    let close = -1
+    for (let index = 0; index < value.length; index += 1) {
+      if (value[index] === '(') nesting += 1
+      else if (value[index] === ')') nesting -= 1
+      if (nesting === 0) { close = index; break }
+    }
+    if (close < 2) throw new Error('BASE_SPEC_INVALID')
+    splitTypes(value.slice(1, close)).forEach((item) => validateCanonicalType(item, depth + 1))
+    suffixStart = close + 1
+  } else {
+    const bracket = value.indexOf('[')
+    suffixStart = bracket >= 0 ? bracket : value.length
+    const base = value.slice(0, suffixStart)
+    const sized = /^(u?int)([0-9]+)$/.exec(base)
+    const valid = ['address', 'bool', 'string', 'bytes'].includes(base)
+      || /^bytes(?:[1-9]|[12][0-9]|3[0-2])$/.test(base)
+      || Boolean(sized && Number(sized[2]) >= 8 && Number(sized[2]) <= 256 && Number(sized[2]) % 8 === 0)
+    if (!valid) throw new Error('BASE_SPEC_INVALID')
+  }
+  const suffix = value.slice(suffixStart)
+  const suffixes = [...suffix.matchAll(ARRAY_SUFFIX_RE)]
+  if (suffixes.length > 4 || suffixes.map((match) => match[0]).join('') !== suffix) throw new Error('BASE_SPEC_INVALID')
+  for (const match of suffixes) {
+    if (match[1] !== undefined && (match[1].startsWith('0') || Number(match[1]) < 1 || Number(match[1]) > 64)) throw new Error('BASE_SPEC_INVALID')
+  }
+}
+
+function validateSignature(value: unknown): asserts value is string {
+  text(value, 512)
+  const match = /^([a-z][a-z0-9_]{0,15})\((.*)\)->\((.*)\):(pure|view|nonpayable|payable)$/.exec(value)
+  if (!match) throw new Error('BASE_SPEC_INVALID')
+  ;[...splitTypes(match[2]), ...splitTypes(match[3])].forEach((item) => validateCanonicalType(item))
+}
+
 function validateBase(value: unknown): BaseSpecMetrics {
   if (!isRecord(value) || !exactKeys(value, ['requirements', 'abi']) || !Array.isArray(value.requirements) || value.requirements.length < 1 || value.requirements.length > 8 || !Array.isArray(value.abi) || value.abi.length < 1 || value.abi.length > 16) throw new Error('BASE_SPEC_INVALID')
   const ids = new Set<string>()
   for (const requirement of value.requirements) {
-    if (!isRecord(requirement) || !exactKeys(requirement, ['id', 'text', 'polarity']) || typeof requirement.id !== 'string' || !ID_RE.test(requirement.id) || ids.has(requirement.id) || !POLARITIES.includes(requirement.polarity as typeof POLARITIES[number])) throw new Error('BASE_SPEC_INVALID')
+    if (!isRecord(requirement) || !exactKeys(requirement, ['id', 'text', 'polarity', 'signature']) || typeof requirement.id !== 'string' || !ID_RE.test(requirement.id) || ids.has(requirement.id) || !POLARITIES.includes(requirement.polarity as typeof POLARITIES[number])) throw new Error('BASE_SPEC_INVALID')
     text(requirement.text, 384)
+    validateSignature(requirement.signature)
     ids.add(requirement.id)
   }
   const callables = value.abi.map(callableEntry)
@@ -296,6 +354,16 @@ function validateBase(value: unknown): BaseSpecMetrics {
     parameterNodes: metrics.nodes,
     depth: metrics.depth,
   }
+}
+
+export function deterministicEvaluation(base: BaseSpec): { result: { v: 1; labels: string[] }; outcome: string } {
+  const signatures = base.abi.map(callableEntry).filter((entry): entry is { key: string; signature: string } => entry !== null).map((entry) => entry.signature)
+  const labels = base.requirements.flatMap((requirement) => signatures.map((signature) => signature === requirement.signature ? (requirement.polarity === 'REQUIRED' ? 'IMPLEMENTS' : 'VIOLATES') : 'NONE'))
+  let outcome = 'CONFORMANT'
+  const rows = base.requirements.map((_, index) => labels.slice(index * signatures.length, (index + 1) * signatures.length))
+  if (base.requirements.some((requirement, index) => requirement.polarity === 'FORBIDDEN' && rows[index].includes('VIOLATES'))) outcome = 'FORBIDDEN_SURFACE'
+  else if (base.requirements.some((requirement, index) => requirement.polarity === 'REQUIRED' && !rows[index].includes('IMPLEMENTS'))) outcome = 'MISSING_REQUIRED_SURFACE'
+  return { result: { v: 1, labels }, outcome }
 }
 
 function normalizedInteger(value: unknown): string {

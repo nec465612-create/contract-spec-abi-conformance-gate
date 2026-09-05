@@ -1,26 +1,30 @@
 # Live verification
 
-Status: POST_DEPLOY_TEST CHANGES REQUIRED. The historical frozen Studio UI request count remains non-reconstructable and is not claimed. Under the retrospective legacy `OBSERVABLE_ACTION_LEDGER` mode, transaction hashes, bounded status actions, terminal evidence and authoritative readbacks are preserved without inventing physical telemetry. The latest instrumented replacement finalized deployment/create/replace/freeze, then finalized `evaluate_case` as `TIMEOUT`; the authoritative state remains unchanged and Vercel browser E2E has not started.
+Status: PRE_DEPLOY REBUILD IN PROGRESS. The user-approved deterministic-freeze adaptation is implemented locally and has no deployment, Studio RPC run, GitHub/Vercel publication, or Vercel E2E evidence. Historical nondeterministic deployment and timeout artifacts remain preserved but are not reusable for this source.
 
-Evidence date: 2026-09-05 (Asia/Saigon)
+Evidence date: 2026-09-06 (Asia/Saigon)
 
-## Current measured recovery status
+## Current adapted-source status
 
 | Field | Value |
 |---|---|
-| Current source commit | `de66367b459ed421b73bdfb7f3d04bf15088ed38` |
-| Current source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` |
-| Current Studio deployment | `0x976E9e852C00FAbB4137DeaC50e475DE01B3A1F1` |
-| Current deployment hash | `0xef232017709f5b3109e3c3d7525077628b96f3397a55247b4481e5da7b9e1495` |
-| Current manifest | `BLOCKED_PARTIAL_CASE_ACCEPTED` |
-| Accepted case writes | create `0x78452b...30f9f4a`, replace `0x33caa1...ea0f97`, freeze `0x32afee...a06e533` |
-| Evaluate transaction | `0x64c579...80a5fca`: FINALIZED, `TIMEOUT`, no state mutation |
-| Current authoritative state | count `1`; case 1 revision `3`; `FROZEN`; last operation `freeze_case` |
-| Current full evidence | `studio-rpc-run-1788610697042.json`: 52 requests, 5 transactions, blocked at S6 |
-| Current sparse read | `studio-rpc-sparse-read-1788610828786.json`: finalized timeout, 3 reads, no retry |
-| Release boundary | No GitHub/Vercel publication or Vercel E2E has occurred |
+| Adapted source commit | `PENDING_IMPLEMENTATION_COMMIT` |
+| Adapted source SHA-256 | `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F` |
+| Adapted Studio deployment | None |
+| Adapted deployment hash | None |
+| Adapted live manifest | None |
+| Adapted public ABI | 10 methods: 7 views and 3 writes |
+| Adapted deterministic terminal path | `freeze_case`: revision `3`, `DONE`, exact-signature result |
+| Local evidence | Direct Mode `13 passed`; frontend `42 passed`; frontend production build PASS; runner static check pending final binding |
+| Release boundary | No Studio RPC, GitHub/Vercel publication, or Vercel E2E has occurred |
 
-The accepted owner-bound case creator key was not retained, so the current deployment is not resumed. The finalized evaluation timeout is preserved as a failed live case with unchanged authoritative state; no evaluation retry was submitted. Studio and frontend RPC ledgers remain separate.
+The adapted source requires a fresh exact-revision anonymous `PRE_DEPLOY` decision. Studio and frontend RPC ledgers remain separate; the current adapted runner is a proof artifact only until that decision exists.
+
+## Historical superseded-source recovery (not current adapted source)
+
+The following paragraphs and evidence files are bound to the old nondeterministic source and are retained for audit continuity only. They do not establish current deployment, readiness, or release status.
+
+The accepted owner-bound case creator key was not retained, so the historical deployment was not resumed. Its finalized evaluation timeout remains preserved as failed historical evidence with unchanged authoritative state; no evaluation retry was submitted.
 
 A single later read-only status diagnostic is preserved in [studio-rpc-status-diagnostic-1788612789642.json](evidence/studio-rpc-status-diagnostic-1788612789642.json). The endpoint returned an RPC parameter error; no alternate payload or state-changing request was attempted. This diagnostic does not override the existing full/sparse authoritative evidence or claim validator readiness.
 

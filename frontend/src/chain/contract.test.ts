@@ -1,10 +1,10 @@
-import { normalizeBaseJson, parseJsonStrict, ReadCache } from './contract'
+import { deterministicEvaluation, normalizeBaseJson, parseJsonStrict, ReadCache } from './contract'
 import { stableStringify } from '../lib/encoding'
 
 describe('contract read boundary', () => {
   it('canonicalizes base JSON without executing or trusting presentation order', () => {
-    const result = normalizeBaseJson('{"abi":[{"inputs":[],"name":"check","outputs":[],"stateMutability":"view","type":"function"}],"requirements":[{"id":"read","polarity":"REQUIRED","text":"Expose a read operation"}]}')
-    expect(result.canonical).toBe('{"abi":[{"inputs":[],"name":"check","outputs":[],"stateMutability":"view","type":"function"}],"requirements":[{"id":"read","polarity":"REQUIRED","text":"Expose a read operation"}]}')
+    const result = normalizeBaseJson('{"abi":[{"inputs":[],"name":"check","outputs":[],"stateMutability":"view","type":"function"}],"requirements":[{"id":"read","polarity":"REQUIRED","signature":"check()->():view","text":"Expose a read operation"}]}')
+    expect(result.canonical).toBe('{"abi":[{"inputs":[],"name":"check","outputs":[],"stateMutability":"view","type":"function"}],"requirements":[{"id":"read","polarity":"REQUIRED","signature":"check()->():view","text":"Expose a read operation"}]}')
     expect(result.metrics).toMatchObject({ requirements: 1, abiEntries: 1, functionEntries: 1, parameterNodes: 0, depth: 0 })
   })
 
@@ -16,15 +16,20 @@ describe('contract read boundary', () => {
   it('enforces the contract ABI grammar and live resource limits', () => {
     const tuple = { name: 'items', type: 'tuple[][2]', components: [{ name: 'id', type: 'uint' }, { name: 'owner', type: 'address' }] }
     const result = normalizeBaseJson(JSON.stringify({
-      requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
+      requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED', signature: 'check((uint256,address)[][2])->():view' }],
       abi: [{ type: 'function', name: 'check', inputs: [tuple], outputs: [], stateMutability: 'view' }],
     }))
     expect(result.metrics.parameterNodes).toBe(3)
     expect(result.metrics.depth).toBe(1)
     expect(() => normalizeBaseJson(JSON.stringify({
-      requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED' }],
+      requirements: [{ id: 'read', text: 'Expose a read operation', polarity: 'REQUIRED', signature: 'check(uint256)->():view' }],
       abi: [{ type: 'function', name: 'check', inputs: [{ name: 'x', type: 'uint256', components: [] }], outputs: [], stateMutability: 'view' }],
     }))).toThrow('BASE_SPEC_INVALID')
+  })
+
+  it('derives exact-signature conformance without an external evaluator', () => {
+    const { parsed } = normalizeBaseJson('{"requirements":[{"id":"need","text":"Need check","polarity":"REQUIRED","signature":"check()->():view"},{"id":"ban","text":"Ban write","polarity":"FORBIDDEN","signature":"write()->():nonpayable"}],"abi":[{"type":"function","name":"check","inputs":[],"outputs":[],"stateMutability":"view"}]}')
+    expect(deterministicEvaluation(parsed)).toEqual({ result: { v: 1, labels: ['IMPLEMENTS', 'NONE'] }, outcome: 'CONFORMANT' })
   })
 
   it('deduplicates identical in-flight reads and invalidates safe cache entries', async () => {

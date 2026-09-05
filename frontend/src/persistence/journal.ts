@@ -84,7 +84,7 @@ function terminal(status: JournalStatus): boolean {
 }
 
 export function caseIdFromIntent(intent: string): string | null {
-  const match = /^(?:replace_base|freeze_case|evaluate_case|retry_case):([1-9][0-9]*):[0-9]+$/.exec(intent)
+  const match = /^(?:replace_base|freeze_case):([1-9][0-9]*):[0-9]+$/.exec(intent)
   return match?.[1] ?? null
 }
 

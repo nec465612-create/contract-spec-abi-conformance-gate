@@ -1,5 +1,4 @@
 import json
-import cloudpickle
 
 
 NONCE = "0123456789abcdef0123456789abcdef"
@@ -22,7 +21,7 @@ def function(name="check", inputs=None, outputs=None, mutability="view"):
 def base(requirements=None, abi=None):
     return {
         "requirements": requirements
-        or [{"id": "read", "text": "Expose a read operation", "polarity": "REQUIRED"}],
+        or [{"id": "read", "text": "Expose a read operation", "polarity": "REQUIRED", "signature": "check()->():view"}],
         "abi": abi or [function()],
     }
 
@@ -62,7 +61,7 @@ def test_create_views_history_replay_and_nonce_conflict(
     assert int(create(contract)) == 1
     assert int(contract.get_count()) == 1
 
-    changed = base(requirements=[{"id": "write", "text": "Expose a write", "polarity": "REQUIRED"}])
+    changed = base(requirements=[{"id": "write", "text": "Expose a write", "polarity": "REQUIRED", "signature": "write()->():nonpayable"}])
     with direct_vm.expect_revert("NONCE_CONFLICT"):
         create(contract, changed)
     assert record(contract) == first
@@ -88,9 +87,11 @@ def test_draft_authority_revision_freeze_and_no_write(
     contract.replace_base(1, encoded(base()), 1)
     contract.freeze_case(1, 2)
     frozen = record(contract)
-    assert frozen["phase"] == "FROZEN"
+    assert frozen["phase"] == "DONE"
     assert frozen["base_locked"] is True
     assert frozen["response_locked"] is True
+    assert frozen["outcome"] == "CONFORMANT"
+    assert frozen["result"] == {"v": 1, "labels": ["IMPLEMENTS"]}
     assert frozen["revision"] == "3"
     assert json.loads(contract.get_version(1, 2))["phase"] == "BASE_DRAFT"
 
@@ -151,11 +152,11 @@ def test_input_caps_controls_extra_keys_and_bool_as_integer(
     extra["unexpected"] = True
     with direct_vm.expect_revert("BAD_SCHEMA"):
         create(contract, extra)
-    controls = base(requirements=[{"id": "read", "text": "bad\u0000text", "polarity": "REQUIRED"}])
+    controls = base(requirements=[{"id": "read", "text": "bad\u0000text", "polarity": "REQUIRED", "signature": "check()->():view"}])
     with direct_vm.expect_revert("BAD_TEXT"):
         contract.create_case("1" * 32, encoded(controls), 0)
     with direct_vm.expect_revert("CAPACITY"):
-        contract.create_case("2" * 32, encoded(base(requirements=[{"id": "read", "text": "x" * 9000, "polarity": "REQUIRED"}])), 0)
+        contract.create_case("2" * 32, encoded(base(requirements=[{"id": "read", "text": "x" * 9000, "polarity": "REQUIRED", "signature": "check()->():view"}])), 0)
     with direct_vm.expect_revert("BAD_INTEGER"):
         contract.list_cases(True, 1)
 
@@ -170,41 +171,28 @@ def test_u256_rejects_strings_and_floats_without_truncation(
         contract.create_case(NONCE, encoded(base()), "0")
 
 
-def test_evaluate_conformant_and_validator_disagreement(
+def test_freeze_computes_deterministic_conformance_without_nondeterminism(
     direct_vm, direct_deploy, direct_alice
 ):
     contract = deploy(direct_vm, direct_deploy, direct_alice)
     create(contract)
     contract.freeze_case(1, 1)
-    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", '{"v":1,"labels":["IMPLEMENTS"]}')
-    contract.evaluate_case(1, 2)
     final = record(contract)
     assert final["phase"] == "DONE"
     assert final["outcome"] == "CONFORMANT"
-    assert final["accepted_attempts"] == 1
-    assert final["revision"] == "3"
-    assert direct_vm.run_validator() is True
-    _, leader, validator = direct_vm._captured_validators[-1]
-    cloudpickle.dumps(leader)
-    cloudpickle.dumps(validator)
-
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", '{"v":1,"labels":["NONE"]}')
-    assert direct_vm.run_validator() is False
-    assert record(contract) == final
+    assert final["revision"] == "2"
+    assert final["result"] == {"v": 1, "labels": ["IMPLEMENTS"]}
+    assert direct_vm._captured_validators == []
 
 
-def test_oversized_model_result_is_a_no_write_failure(
+def test_invalid_canonical_signature_is_a_no_write_failure(
     direct_vm, direct_deploy, direct_alice
 ):
     contract = deploy(direct_vm, direct_deploy, direct_alice)
-    create(contract)
-    contract.freeze_case(1, 1)
-    before = contract.get_case(1)
-    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", " " * 4097)
-    with direct_vm.expect_revert("CAPACITY"):
-        contract.evaluate_case(1, 2)
-    assert contract.get_case(1) == before
+    invalid = base(requirements=[{"id": "read", "text": "Expose a read", "polarity": "REQUIRED", "signature": "check(uint)->():view"}])
+    with direct_vm.expect_revert("BAD_SIGNATURE"):
+        create(contract, invalid)
+    assert int(contract.get_count()) == 0
 
 
 def test_draft_revision_reservation_blocks_the_last_incomplete_path(
@@ -212,11 +200,11 @@ def test_draft_revision_reservation_blocks_the_last_incomplete_path(
 ):
     contract = deploy(direct_vm, direct_deploy, direct_alice)
     create(contract)
-    for revision in range(1, 28):
+    for revision in range(1, 31):
         contract.replace_base(1, encoded(base()), revision)
     before = contract.get_case(1)
     with direct_vm.expect_revert("CAPACITY"):
-        contract.replace_base(1, encoded(base()), 28)
+        contract.replace_base(1, encoded(base()), 31)
     assert contract.get_case(1) == before
 
 
@@ -225,48 +213,27 @@ def test_reducer_precedence_and_polarity_shape(
 ):
     contract = deploy(direct_vm, direct_deploy, direct_alice)
     requirements = [
-        {"id": "need", "text": "Must expose read", "polarity": "REQUIRED"},
-        {"id": "ban", "text": "Must not expose write", "polarity": "FORBIDDEN"},
+        {"id": "need", "text": "Must expose read", "polarity": "REQUIRED", "signature": "missing()->():view"},
+        {"id": "ban", "text": "Must not expose write", "polarity": "FORBIDDEN", "signature": "write()->():nonpayable"},
     ]
-    create(contract, base(requirements=requirements))
+    create(contract, base(requirements=requirements, abi=[function("write", mutability="nonpayable")]))
     contract.freeze_case(1, 1)
-    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", '{"v":1,"labels":["NONE","VIOLATES"]}')
-    contract.evaluate_case(1, 2)
-    assert record(contract)["outcome"] == "FORBIDDEN_SURFACE"
-
-    contract.create_case("f" * 32, encoded(base()), 0)
-    contract.freeze_case(2, 1)
-    direct_vm.clear_mocks()
-    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", '{"v":1,"labels":["VIOLATES"]}')
-    before = contract.get_case(2)
-    with direct_vm.expect_revert("MALFORMED_RESULT"):
-        contract.evaluate_case(2, 2)
-    assert contract.get_case(2) == before
+    final = record(contract)
+    assert final["result"] == {"v": 1, "labels": ["NONE", "VIOLATES"]}
+    assert final["outcome"] == "FORBIDDEN_SURFACE"
 
 
-def test_unresolved_retry_cooldown_and_exhaustion(
+def test_missing_required_signature_is_terminal_without_retry(
     direct_vm, direct_deploy, direct_alice
 ):
     contract = deploy(direct_vm, direct_deploy, direct_alice)
-    create(contract)
+    missing = base(requirements=[{"id": "write", "text": "Expose a write", "polarity": "REQUIRED", "signature": "write(address,uint256)->():nonpayable"}])
+    create(contract, missing)
     contract.freeze_case(1, 1)
-    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", '{"v":1,"labels":["UNKNOWN"]}')
-    contract.evaluate_case(1, 2)
-    first = record(contract)
-    assert first["phase"] == "UNRESOLVED"
-    assert first["accepted_attempts"] == 1
-
-    with direct_vm.expect_revert("COOLDOWN"):
-        contract.retry_case(1, 3)
-    direct_vm.warp("2099-01-01T00:00:00+00:00")
-    contract.retry_case(1, 3)
-    direct_vm.warp("2099-01-01T00:02:00+00:00")
-    contract.retry_case(1, 4)
-    exhausted = record(contract)
-    assert exhausted["phase"] == "EXHAUSTED"
-    assert exhausted["accepted_attempts"] == 3
-    with direct_vm.expect_revert("BAD_PHASE"):
-        contract.retry_case(1, 5)
+    final = record(contract)
+    assert final["phase"] == "DONE"
+    assert final["outcome"] == "MISSING_REQUIRED_SURFACE"
+    assert final["result"] == {"v": 1, "labels": ["NONE"]}
 
 
 def test_parent_requires_terminal_same_actor_and_indexes_child(
@@ -277,8 +244,6 @@ def test_parent_requires_terminal_same_actor_and_indexes_child(
     with direct_vm.expect_revert("BAD_PARENT"):
         contract.create_case("1" * 32, encoded(base()), 1)
     contract.freeze_case(1, 1)
-    direct_vm.mock_llm("BEGIN_UNTRUSTED_JSON", '{"v":1,"labels":["IMPLEMENTS"]}')
-    contract.evaluate_case(1, 2)
     child = contract.create_case("1" * 32, encoded(base()), 1)
     assert int(child) == 2
     assert json.loads(contract.list_children(1, 0, 4)) == {"ids": ["2"], "next": "0"}

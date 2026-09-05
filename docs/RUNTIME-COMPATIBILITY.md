@@ -1,14 +1,14 @@
 # Runtime compatibility decision
 
-Status: `RESOLVED_FOR_POST_DEPLOY_TEST` for the local build toolchain and the exact Studio candidate. Vercel publication and browser E2E remain separate gates.
+Status: `RESOLVED_FOR_PRE_DEPLOY` for the adapted local build toolchain. The earlier Studio candidate is historical; the deterministic source requires fresh PRE_DEPLOY review and deployment evidence.
 
 Decision date: `2026-09-05`
 
-Source-code correction commit: `a046347c0600cfdc3aeab25e48689dbf4a6f144d`
+Adapted source implementation commit: `PENDING_IMPLEMENTATION_COMMIT`
 
-Exact reviewed and deployed source commit: `de66367b459ed421b73bdfb7f3d04bf15088ed38`
+Historical deployed source commit: `de66367b459ed421b73bdfb7f3d04bf15088ed38`
 
-Contract source SHA-256: `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45`
+Adapted contract source SHA-256: `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`
 
 ## Decision
 
@@ -50,7 +50,7 @@ This decision resolves the package identity question for PRE_DEPLOY:
 
 The official CLI reference rendered `0.39.1` in its generated version label when retrieved on this date, while the official upstream `v0.39.2` release tag, npm registry artifact, and installed CLI resolved `0.39.2`. The tagged upstream metadata and command output are the reproducibility evidence for the selected CLI target; the generated documentation-label lag does not change the contract's `Depends` identity or the Python package roles.
 
-This runtime decision does not by itself claim hosted Studio deployment, Studionet finality, transaction success, authoritative readback, Vercel publication, or public E2E. The completed Studio evidence is bound separately in `docs/VERIFICATION.md`; Vercel publication and browser E2E remain mandatory later gates.
+This runtime decision does not claim a deployment of the adapted source, Studionet finality, transaction success, authoritative readback, Vercel publication, or public E2E. Earlier Studio evidence is historical and bound separately in `docs/VERIFICATION.md`; the adapted source must pass fresh PRE_DEPLOY and downstream gates.
 
 ## Reproduction commands
 

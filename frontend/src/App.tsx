@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   ContractGateway,
+  deterministicEvaluation,
   normalizeBaseJson,
   parseJsonStrict,
   type CaseRecord,
@@ -15,10 +16,10 @@ import { isAddress, type WalletOption, type WalletSession } from './wallet/types
 import { TransactionProgress } from './components/TransactionProgress'
 import './styles.css'
 
-type RequirementDraft = { id: string; text: string; polarity: 'REQUIRED' | 'FORBIDDEN' }
+type RequirementDraft = { id: string; text: string; polarity: 'REQUIRED' | 'FORBIDDEN'; signature: string }
 
 const DEFAULT_REQUIREMENTS: RequirementDraft[] = [
-  { id: 'transfer', text: 'The contract exposes a transfer operation.', polarity: 'REQUIRED' },
+  { id: 'transfer', text: 'The contract exposes this exact transfer function.', polarity: 'REQUIRED', signature: 'transfer(address,uint256)->():nonpayable' },
 ]
 
 const DEFAULT_ABI = `[
@@ -66,7 +67,6 @@ function friendlyError(error: unknown): string {
     if (error.message.includes('AUTHORITATIVE_READBACK_MISMATCH')) return 'The transaction finalized, but the expected case state was not visible yet. Refresh and reconcile before retrying.'
     if (error.message.includes('FAILED_WRITE_POSTSTATE_MISMATCH')) return 'The failed transaction changed a historical revision unexpectedly. Keep the journal blocked and inspect the case.'
     if (error.message.includes('STALE_REVISION')) return 'This case changed on chain. Refresh it before submitting another action.'
-    if (error.message.includes('COOLDOWN')) return 'Retry is temporarily unavailable for this case. Wait for the contract cooldown and refresh.'
     if (error.message.includes('BAD_PHASE')) return 'That action is not available in the case’s current phase.'
     if (error.message.includes('another network context')) return 'This pending action belongs to another network or contract context and is read-only here.'
     if (error.message.includes('awaiting authoritative finality')) return 'Finality is not yet authoritative. Keep the pending record and reconcile it later; do not resubmit.'
@@ -80,7 +80,7 @@ function caseStateHash(record: CaseRecord): Promise<string> {
 }
 
 function pendingLabel(entry: JournalEntry): string {
-  const caseMatch = /^(?:replace_base|freeze_case|evaluate_case|retry_case):(\d+):/.exec(entry.intent)
+  const caseMatch = /^(?:replace_base|freeze_case):(\d+):/.exec(entry.intent)
   if (caseMatch) return `Case #${caseMatch[1]}`
   if (entry.intent.startsWith('create:')) return 'New case'
   return 'Contract action'
@@ -110,43 +110,26 @@ function operationPostcondition(record: CaseRecord, method: string, before: Case
     return record.phase === 'BASE_DRAFT'
       && !record.base_locked
       && !record.response_locked
-      && record.accepted_attempts === before.accepted_attempts
       && stableStringify(record.response) === stableStringify(before.response)
       && stableStringify(record.result) === stableStringify(before.result)
       && record.outcome === before.outcome
   }
   if (method === 'freeze_case') {
-    return record.phase === 'FROZEN'
+    const expected = deterministicEvaluation(before.base)
+    return record.phase === 'DONE'
       && record.base_locked
       && record.response_locked
       && stableStringify(record.base) === stableStringify(before.base)
-      && record.accepted_attempts === before.accepted_attempts
+      && stableStringify(record.result) === stableStringify(expected.result)
+      && record.outcome === expected.outcome
   }
-  if (stableStringify(record.base) !== stableStringify(before.base) || !record.response_locked || record.accepted_attempts !== before.accepted_attempts + 1) return false
-  if (!['DONE', 'UNRESOLVED', 'EXHAUSTED'].includes(record.phase) || typeof record.outcome !== 'string' || !/^[0-9]+$/.test(record.last_accepted_at)) return false
-  if (!isRecord(record.result) || record.result.v !== 1 || !Array.isArray(record.result.labels)) return false
-  const functions = before.base.abi.filter((entry) => entry.type === 'function').length
-  const labels = record.result.labels
-  if (labels.length !== before.base.requirements.length * functions || labels.some((label) => !['IMPLEMENTS', 'VIOLATES', 'NONE', 'UNKNOWN'].includes(String(label)))) return false
-  if (labels.includes('UNKNOWN')) return record.outcome === 'UNRESOLVED' && (record.phase === 'UNRESOLVED' || record.phase === 'EXHAUSTED')
-  let expected = 'CONFORMANT'
-  for (let row = 0; row < before.base.requirements.length; row += 1) {
-    const values = labels.slice(row * functions, (row + 1) * functions)
-    if (before.base.requirements[row].polarity === 'FORBIDDEN' && values.includes('VIOLATES')) expected = 'FORBIDDEN_SURFACE'
-  }
-  if (expected === 'CONFORMANT') {
-    for (let row = 0; row < before.base.requirements.length; row += 1) {
-      const values = labels.slice(row * functions, (row + 1) * functions)
-      if (before.base.requirements[row].polarity === 'REQUIRED' && !values.includes('IMPLEMENTS')) expected = 'MISSING_REQUIRED_SURFACE'
-    }
-  }
-  return record.phase === 'DONE' && record.outcome === expected
+  return false
 }
 
 async function isDifferentAcceptedOperation(record: CaseRecord, method: string, caller: string, args: unknown[]): Promise<boolean> {
   if (!isRecord(record.last_operation)) return false
   const operation = record.last_operation
-  const acceptedMethods = ['replace_base', 'freeze_case', 'evaluate_case', 'retry_case']
+  const acceptedMethods = ['replace_base', 'freeze_case']
   if (typeof operation.method !== 'string' || !acceptedMethods.includes(operation.method)) return false
   if (typeof operation.caller !== 'string' || !/^0x[0-9a-f]{40}$/i.test(operation.caller)) return false
   if (typeof operation.args_hash !== 'string' || !/^[0-9a-f]{64}$/i.test(operation.args_hash)) return false
@@ -181,8 +164,7 @@ function outcomeCopy(outcome: string): string {
   if (outcome === 'CONFORMANT') return 'Interface matches submitted requirements'
   if (outcome === 'FORBIDDEN_SURFACE') return 'Forbidden exposure found'
   if (outcome === 'MISSING_REQUIRED_SURFACE') return 'Required operation missing'
-  if (outcome === 'UNRESOLVED') return 'Semantic correspondence unresolved'
-  return outcome || 'Awaiting evaluation'
+  return outcome || 'Awaiting freeze'
 }
 
 interface WalletChooserProps {
@@ -371,12 +353,13 @@ function CreateCaseForm({
                 </select>
               </div>
               <textarea value={requirement.text} onChange={(event) => setRequirements((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, text: event.target.value } : item))} maxLength={384} rows={3} placeholder="Describe the interface requirement" aria-label={`Requirement ${index + 1} text`} required />
+              <input value={requirement.signature} onChange={(event) => setRequirements((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, signature: event.target.value } : item))} maxLength={512} placeholder="transfer(address,uint256)->():nonpayable" aria-label={`Requirement ${index + 1} canonical signature`} required />
               {requirements.length > 1 && <button className="quiet-button remove-requirement" type="button" onClick={() => setRequirements((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}
             </div>
           ))}
-          <button className="quiet-button add-requirement" type="button" disabled={requirements.length >= 8} onClick={() => setRequirements((current) => [...current, { id: '', text: '', polarity: 'REQUIRED' }])}>+ Add requirement</button>
+          <button className="quiet-button add-requirement" type="button" disabled={requirements.length >= 8} onClick={() => setRequirements((current) => [...current, { id: '', text: '', polarity: 'REQUIRED', signature: '' }])}>+ Add requirement</button>
         </div>
-        <small>Each requirement is public text. Keep identifiers unique and use the polarity that the contract should enforce.</small>
+        <small>Each requirement binds one exact canonical function signature. Text is explanatory only; the signature determines the on-chain result.</small>
       </label>
       <label>
         <span>Normalized V1 ABI JSON</span>
@@ -419,7 +402,7 @@ function ConformanceMatrix({ record }: { record: CaseRecord }) {
           <tbody>
             {record.base.requirements.map((requirement, rowIndex) => (
               <tr key={requirement.id}>
-                <th scope="row"><span>{requirement.id}</span><small>{requirement.polarity}</small></th>
+                <th scope="row"><span>{requirement.id}</span><small>{requirement.polarity} · {requirement.signature}</small></th>
                 {functions.map((_, columnIndex) => {
                   const label = typeof labels[rowIndex * functions.length + columnIndex] === 'string' ? String(labels[rowIndex * functions.length + columnIndex]) : '—'
                   return <td key={`${requirement.id}:${columnIndex}`}><span className={`matrix-label matrix-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{label}</span></td>
@@ -632,7 +615,7 @@ export default function App() {
           }
           return record
         }
-        const caseMatch = /^(replace_base|freeze_case|evaluate_case|retry_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
+        const caseMatch = /^(replace_base|freeze_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
         if (!caseMatch) throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         if (String(BigInt(caseMatch[3])) !== entry.pre_revision) throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         const args = JSON.parse(entry.args_json) as unknown
@@ -668,7 +651,7 @@ export default function App() {
           if (id !== '0') throw new Error('FAILED_WRITE_POSTSTATE_MISMATCH')
           return
         }
-        const caseMatch = /^(replace_base|freeze_case|evaluate_case|retry_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
+        const caseMatch = /^(replace_base|freeze_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
         if (!caseMatch || String(BigInt(caseMatch[3])) !== entry.pre_revision) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
         const args = JSON.parse(entry.args_json) as unknown
         if (!Array.isArray(args) || args.length < 2 || typeof args[0] !== 'string' || typeof args[1] !== 'string' || args[0] !== caseMatch[2] || args[1] !== caseMatch[3]) {
@@ -768,7 +751,7 @@ export default function App() {
     }
   }
 
-  const runCaseAction = async (method: 'replace_base' | 'freeze_case' | 'evaluate_case' | 'retry_case') => {
+  const runCaseAction = async (method: 'replace_base' | 'freeze_case') => {
     if (!session || !selectedCase || !gateway || !contractAddress) return
     const expectedRevision = selectedCase.revision
     const preHash = await caseStateHash(selectedCase)
@@ -894,7 +877,7 @@ export default function App() {
                   <div><p className="eyebrow">New case</p><h2>Create a conformance case</h2></div>
                   <span className="section-index">01</span>
                 </div>
-                <p className="section-intro">Start with the user-facing requirements and the ABI surface they describe. The contract validates the shape and locks the source before evaluation.</p>
+                <p className="section-intro">Bind each public requirement to one canonical ABI signature. Freezing computes and stores the deterministic conformance result.</p>
                 <div className="public-boundary-note">
                   <strong>Public and permanent</strong>
                   <p>All submitted text will be public and permanent. Do not include private information, credentials or personal records.</p>
@@ -913,8 +896,8 @@ export default function App() {
                 <div className="record-summary">
                   <div><span>Owner</span><strong>{shortenAddress(selectedCase.primary)}</strong></div>
                   <div><span>Parent</span><strong>{selectedCase.parent === '0' ? 'Top-level' : `Case #${selectedCase.parent}`}</strong></div>
-                  <div><span>Attempts</span><strong>{selectedCase.accepted_attempts}</strong></div>
-                  <div><span>Outcome</span><strong>{selectedCase.outcome || 'Awaiting evaluation'}</strong></div>
+                  <div><span>Evaluation</span><strong>Deterministic</strong></div>
+                  <div><span>Outcome</span><strong>{selectedCase.outcome || 'Awaiting freeze'}</strong></div>
                 </div>
                 <div className="record-grid">
                   <div className="record-block">
@@ -923,8 +906,8 @@ export default function App() {
                     {selectedCase.phase !== 'BASE_DRAFT' && <pre className="json-view">{JSON.stringify(jsonSafe(selectedCase.base), null, 2)}</pre>}
                   </div>
                   <div className="record-block result-block">
-                    <div className="block-heading"><span>Evaluation result</span><span className="block-meta">{selectedCase.response_locked ? 'Locked' : 'Pending'}</span></div>
-                    {selectedCase.outcome ? <div className="outcome-card"><span className="outcome-kicker">Contract outcome</span><strong>{outcomeCopy(selectedCase.outcome)}</strong><p>{selectedCase.outcome} · labels are stored with the frozen source revision.</p></div> : <div className="empty-result"><span className="result-mark">∿</span><strong>No evaluation yet</strong><span>Freeze the base specification to make it eligible for evaluation.</span></div>}
+                    <div className="block-heading"><span>Conformance result</span><span className="block-meta">{selectedCase.response_locked ? 'Locked' : 'Pending'}</span></div>
+                    {selectedCase.outcome ? <div className="outcome-card"><span className="outcome-kicker">Contract outcome</span><strong>{outcomeCopy(selectedCase.outcome)}</strong><p>{selectedCase.outcome} · exact-signature labels are stored with the frozen revision.</p></div> : <div className="empty-result"><span className="result-mark">=</span><strong>No result yet</strong><span>Freeze the base specification to compute its exact-signature result.</span></div>}
                     <pre className="json-view compact">{JSON.stringify(jsonSafe(selectedCase.result), null, 2)}</pre>
                   </div>
                 </div>
@@ -936,9 +919,7 @@ export default function App() {
                 <div className="action-bar">
                   {!session && <span className="inline-hint">Connect the creating wallet to edit this case.</span>}
                   {selectedCase.phase === 'BASE_DRAFT' && <button className="secondary-button" type="button" disabled={writesDisabled || busyAction !== null} onClick={() => void runCaseAction('replace_base')}>{busyAction === 'replace_base' ? 'Saving…' : 'Replace base'}</button>}
-                  {selectedCase.phase === 'BASE_DRAFT' && <button className="primary-button" type="button" disabled={writesDisabled || busyAction !== null} onClick={() => void runCaseAction('freeze_case')}>{busyAction === 'freeze_case' ? 'Freezing…' : 'Freeze case'}</button>}
-                  {selectedCase.phase === 'FROZEN' && <button className="primary-button" type="button" disabled={writesDisabled || busyAction !== null} onClick={() => void runCaseAction('evaluate_case')}>{busyAction === 'evaluate_case' ? 'Evaluating…' : 'Evaluate case'}</button>}
-                  {selectedCase.phase === 'UNRESOLVED' && selectedCase.accepted_attempts < 3 && <button className="primary-button" type="button" disabled={writesDisabled || busyAction !== null} onClick={() => void runCaseAction('retry_case')}>{busyAction === 'retry_case' ? 'Retrying…' : 'Retry evaluation'}</button>}
+                  {selectedCase.phase === 'BASE_DRAFT' && <button className="primary-button" type="button" disabled={writesDisabled || busyAction !== null} onClick={() => void runCaseAction('freeze_case')}>{busyAction === 'freeze_case' ? 'Freezing…' : 'Freeze & evaluate'}</button>}
                   <button className="quiet-button refresh-record" type="button" onClick={() => void loadCase(selectedCase.id)} disabled={loadingCase}>Refresh record</button>
                 </div>
               </div>

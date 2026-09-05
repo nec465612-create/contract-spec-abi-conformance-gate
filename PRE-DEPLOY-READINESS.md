@@ -1,6 +1,6 @@
 # PRE_DEPLOY readiness
 
-Status: PRE_DEPLOY BLOCKED / POST_DEPLOY_TEST CHANGES REQUIRED — RPC-STUDIO-001 is closed under the retrospective-legacy `OBSERVABLE_ACTION_LEDGER` rule. The retained S6 `TIMEOUT` evidence and external Studio readiness blocker remain separate and unresolved; GitHub/Vercel publication and Vercel E2E have not started.
+Status: PRE_DEPLOY REBUILD IN PROGRESS — the approved deterministic-freeze adaptation removes the LLM/validator operation that produced the historical S6 timeout. The adapted source has no deployment or live evidence and requires a fresh exact-revision PRE_DEPLOY review. Historical Studio evidence is not reused as proof for the new source; GitHub/Vercel publication and Vercel E2E have not started.
 
 ## Contract lifecycle classification
 
@@ -17,18 +17,18 @@ This classification is a release decision, not a claim that the contract survive
 | Network | GenLayer Studionet |
 | Chain ID | `61999` |
 | RPC | `https://studio.genlayer.com/api` |
-| Explorer | `https://explorer-studio.genlayer.com/address/0x6de11297EaF221eb95A9E34e5A0e418061789250` |
-| Contract address | `0x6de11297EaF221eb95A9E34e5A0e418061789250` |
-| Deployment transaction | `0x92e04e6f6074d5a4d688ac54ee5374f70a3de1856c9440aa0fdd73fe6f99d094` |
-| Exact source commit | `de66367b459ed421b73bdfb7f3d04bf15088ed38` |
-| Exact source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` (`contracts/main.py`) |
+| Explorer | Pending adapted deployment after PRE_DEPLOY approval |
+| Contract address | Pending adapted deployment after PRE_DEPLOY approval |
+| Deployment transaction | Pending adapted deployment after PRE_DEPLOY approval |
+| Exact source commit | Pending implementation commit |
+| Exact source SHA-256 | `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F` (`contracts/main.py`) |
 | Constructor arguments | None (`__init__()` only) |
 | Linked contracts | None |
 | Upgrade authority | None by intentional-freeze design |
-| Studio deployer account | `0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902` (selected in the current Studio session; public address only) |
+| Studio deployer account | To be selected and recorded read-only before the fresh PRE_DEPLOY package is locked |
 | Studio role | Deployment/signing account only; no upgrade role |
 
-The deployment manifest is now bound to the exact Studio address and transaction above. This is not a release approval: POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.
+The prior addresses and transactions remain historical evidence for superseded source bytes only. This draft does not authorize deployment: POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.
 
 The live deployment/readback ledger and the separate Studio/frontend RPC status are in [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and [`docs/RPC-BUDGET.md`](docs/RPC-BUDGET.md).
 
@@ -50,10 +50,10 @@ This plan applies both RPC layers: the released frontend and the primary-AI Stud
 
 ### Studio and proof-tooling RPC
 
-- The primary AI uses one in-app Studio tab, one shared chain/RPC reader, one active matrix row, and at most one read in flight. No parallel Studio tabs, ad-hoc scripts, duplicate Explorer refreshes, or competing pollers are allowed.
+- The primary AI uses one in-app Studio tab or the already reviewed one-shot runner, one shared chain/RPC reader, one active matrix row, and at most one read in flight. No background health monitor, parallel Studio tabs, duplicate Explorer refreshes, or competing pollers are allowed.
 - For each live write row: take one minimum pre-state snapshot; authorize and submit exactly once; retain the hash immediately; observe completion on the existing Studio transaction journey or with sparse completion-based status checks at `10s -> 20s -> 40s -> 80s` (maximum four checks, one at a time); stop polling when terminal, hidden, disconnected, aborted, or still pending after the bound.
 - At terminal state, perform one full transaction/readback inspection and only the minimum authoritative post-state reads needed by that row, followed by one Explorer/RPC corroboration for the consequential write. Stop all status polling before starting the next row.
-- On `429`, server-busy, or transient transport failure, honor `Retry-After`; otherwise use bounded backoff, stop before the budget is exhausted, preserve the existing hash/state, and resume with one sparse reconciliation after cooldown. Never replay a write because a status/readback call failed.
+- On `429`, server-busy, or transient transport failure, honor `Retry-After`; otherwise use bounded backoff, stop before the budget is exhausted, preserve the existing hash/state, and perform at most one explicit sparse reconciliation. Never replay a write because a status/readback call failed.
 - The run records attempted rows, retries, call counts, intervals, hashes, and readback evidence. A pending or unavailable row remains unresolved; it is not converted to PASS by a screenshot, timeout, or assumed Studio result.
 
 ## Recovery limits and runbook
@@ -71,10 +71,8 @@ All rows are secret-free and must be executed only after anonymous `PRE_DEPLOY` 
 |---|---|---|---|
 | S1 | Create and nonce identity | `create_case` with a fresh lowercase 32-hex nonce, valid one-function base, parent `0` | `FINALIZED` + successful execution; revision `1`, `BASE_DRAFT`, exact base and creator |
 | S2 | Draft replacement and history | `replace_base(id, valid base, 1)` | Revision `2`, `BASE_DRAFT`, exact new base; revision `1` unchanged |
-| S3 | Freeze transition | `freeze_case(id, 2)` | Revision `3`, `FROZEN`, both lock flags true; revision `2` unchanged |
-| S4 | Positive evaluation | `evaluate_case(id, 3)` with deterministic agreement fixture | Revision `4`, terminal outcome and exact result vector; historical revision `3` unchanged |
-| S5 | Negative/no-write boundary | malformed/extra-key base or stale revision | Rejected write and unchanged authoritative pre-state/history |
-| S6 | Unresolved retry boundary | agreed `UNKNOWN`, then retry only after cooldown | `UNRESOLVED` then accepted retry/exhaustion with exact attempt count and history |
-| S7 | Read-only surface | `get_case`, `get_version`, `get_count`, paginated indexes | Exact canonical records and no mutation |
+| S3 | Deterministic freeze and positive consequence | `freeze_case(id, 2)` | Revision `3`, `DONE`, locks true, `CONFORMANT`, exact `IMPLEMENTS` matrix; revision `2` unchanged |
+| S4 | Negative/no-write boundary | stale `replace_base(id, base, 2)` after revision `3` | Finalized expected `STALE_REVISION` execution error and unchanged authoritative state/history |
+| S5 | Read-only surface | `get_case`, `get_version`, `get_count`, paginated indexes | Exact canonical records and no mutation |
 
 The live matrix is evidence to be produced in `POST_DEPLOY_TEST`; this document is the PRE_DEPLOY plan and limitation disclosure, not live proof.

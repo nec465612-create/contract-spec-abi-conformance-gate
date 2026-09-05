@@ -34,10 +34,10 @@ describe('journal', () => {
     const first = await store.reserve(baseInput)
     expect(first.status).toBe('SIGNING')
     await expect(store.reserve(baseInput)).rejects.toMatchObject({ code: 'PENDING_CONFLICT' })
-    await expect(store.reserve({ ...baseInput, method: 'evaluate_case', intent: 'evaluate_case:1:2' })).rejects.toMatchObject({ code: 'PENDING_CONFLICT' })
+    await expect(store.reserve({ ...baseInput, method: 'replace_base', intent: 'replace_base:1:2' })).rejects.toMatchObject({ code: 'PENDING_CONFLICT' })
     expect(first.reservation).toMatch(/^[0-9a-f]{32}$/)
     expect(first.pre_hash).toMatch(/^[0-9a-f]{64}$/)
-    await expect(store.markSubmitted({ ...first, method: 'evaluate_case' }, '0x2222222222222222222222222222222222222222222222222222222222222222')).rejects.toMatchObject({ code: 'IMMUTABLE_JOURNAL_CONTEXT' })
+    await expect(store.markSubmitted({ ...first, method: 'replace_base' }, '0x2222222222222222222222222222222222222222222222222222222222222222')).rejects.toMatchObject({ code: 'IMMUTABLE_JOURNAL_CONTEXT' })
 
     const submitted = await store.markSubmitted(first, '0x2222222222222222222222222222222222222222222222222222222222222222')
     expect(submitted.status).toBe('SUBMITTED')
