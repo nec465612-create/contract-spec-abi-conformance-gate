@@ -1,8 +1,8 @@
 # RPC budget matrix
 
-Status: PRE_DEPLOY REBUILD IN PROGRESS. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. Its new S0–S7 Studio matrix is locked below and has not been executed. All prior deployments and request ledgers are historical evidence for superseded source bytes only. Frontend release evidence remains intentionally pending Vercel E2E.
+Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The adapted contract computes exact-signature conformance during `freeze_case` and has no LLM, validator prompt, evaluation retry, cooldown, or health monitor. The locked S0–S7 Studio matrix has one retained adapted run through S3; continuation is review-gated and must not replay deployment/create. Frontend release evidence remains intentionally pending Vercel E2E.
 
-Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`, implementation commit `cd833b78b43e22661ade6a4dddad3fc4269eb07a`. Selected disposable Studio signer: `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (public address only; no transaction). No adapted contract address or transaction exists. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
+Current source binding: adapted contract source SHA-256 `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F`, implementation commit `cd833b78b43e22661ade6a4dddad3fc4269eb07a`, exact package HEAD `897fa347e1e381290feee70e6bed79b9b3febf34`. Selected disposable Studio signer: `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (public address only). Adapted deployment address is `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D`; no deployment/create replay is permitted. Studio and frontend budgets are separate ledgers; one cannot satisfy the other.
 
 ## STUDIO RPC MEASUREMENT CAPABILITY PROBE — adapted source
 
@@ -10,16 +10,16 @@ STUDIO_CAPABILITY_PROBE_STATUS: COMPLETE
 STUDIO_MEASUREMENT_MODE: OBSERVABLE_ACTION_LEDGER
 STUDIO_MEASUREMENT_TIMING: PRE_E2E
 STUDIO_CAPABILITY_PROBE_AT: 2026-09-06T02:46:00+07:00
-STUDIO_FIRST_ACTION_AT: NOT_STARTED
-STUDIO_E2E_STARTED_AT: NOT_STARTED
+STUDIO_FIRST_ACTION_AT: 2026-09-05T20:17:30.019Z
+STUDIO_E2E_STARTED_AT: 2026-09-05T20:17:30.019Z
 STUDIO_CAPABILITY_TOOL_OR_API: probes/studio_rpc_run.mjs global fetch instrumentation and operation ledger
 STUDIO_CAPABILITY_CHECK: node --check probes/studio_rpc_run.mjs plus static verification of global rpcRequests, requestSequence, operation ownership, per-row caps, immediate transaction retention and one-shot submission guard
 STUDIO_CAPABILITY_RESULT: every runner-visible Studio JSON-RPC action is assigned to one S0-S7 row; physical transport requests outside the instrument are not claimed
-STUDIO_PHYSICAL_COUNT_SOURCE: NOT_APPLICABLE
-STUDIO_PHYSICAL_COUNT_CLAIM: NONE
+STUDIO_PHYSICAL_COUNT_SOURCE: docs/evidence/studio-rpc-run-1788639450020.json
+STUDIO_PHYSICAL_COUNT_CLAIM: OBSERVABLE_LEDGER_ONLY
 STUDIO_REPLAY_FOR_MEASUREMENT: NO
 
-The mode is locked before any adapted-source Studio action. A future run must preserve every request event, row count, transaction hash, bounded status check, terminal receipt and authoritative readback. The absence of physical transport telemetry cannot be represented as zero or repaired by replaying a write.
+The mode was locked before the adapted-source Studio action. The retained run preserves every runner-visible request event, row count, transaction hash, bounded status check, terminal receipt and readback boundary. It made 21 observable requests and retained two hashes; S0–S3 are within cap and all events are operation-scoped. The runner stopped at S3 only because its earlier execution classifier treated quorum-idle receipts as an execution failure. A separate read-only reconciliation confirms create accepted and state is `id=1`, `count=1`, revision `1`, `BASE_DRAFT`. The current continuation path reclassifies only that retained operation and begins at S4; it cannot replay deployment/create.
 
 ## Historical Studio RPC measurement capability classification
 
@@ -88,6 +88,21 @@ The adapted runner's explicit S0–S7 sequence is: disposable funding, chain/acc
 ```text
 STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node probes/studio_rpc_run.mjs
 ```
+
+### Current adapted partial ledger
+
+The exact adapted run is preserved locally in `docs/evidence/studio-rpc-run-1788639450020.json` (SHA-256 `CD5084333797668CA3C13852B51E859111E0C2E264B806A6A1544116FBA68C7C`) and the separate read-only reconciliation in `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (SHA-256 `A785FEE34E60495EB96B24589942195CC3184B1F18FA2DCA5C38C592DB1068B6`). The deployment finalized at `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5`; the create finalized at `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9`. The run has `requestSequence=21`, `transactionCount=2`, and status `BLOCKED` only because of the corrected MAJORITY_AGREE/idle-receipt classification. No later write has been made.
+
+| Operation | Planned maximum | Actual RPC count | Transaction hash | Terminal evidence |
+|---|---:|---:|---|---|
+| S0-funding | 1 | 1 | n/a | PASS |
+| S0-preflight | 2 | 2 | n/a | PASS |
+| S1-schema | 1 | 1 | n/a | PASS |
+| S2-deploy | 13 | 9 | `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5` | FINALIZED; source readback passed |
+| S3-create-case1 | 14 | 8 | `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9` | FINALIZED MAJORITY_AGREE; read-only state reconciliation passed |
+| **Total** | — | **21** | **2 retained hashes** | **BLOCKED_PARTIAL; continuation review required** |
+
+The read-only reconciliation is [studio-adapted-partial-reconciliation-1788639450020.json](evidence/studio-adapted-partial-reconciliation-1788639450020.json). The continuation command, when separately approved, must use the retained evidence paths and `STUDIO_PARTIAL_RESUME=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN`; it starts at S4 and never resubmits S2/S3.
 
 ## Historical superseded-source runs (not current adapted source)
 

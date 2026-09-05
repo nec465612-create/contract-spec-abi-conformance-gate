@@ -1,6 +1,6 @@
 # Live verification
 
-Status: PRE_DEPLOY REBUILD IN PROGRESS. The user-approved deterministic-freeze adaptation is implemented locally and has no deployment, Studio RPC run, GitHub/Vercel publication, or Vercel E2E evidence. Historical nondeterministic deployment and timeout artifacts remain preserved but are not reusable for this source.
+Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL. The deterministic-freeze adaptation has a finalized disposable deployment and create transaction with retained observable Studio evidence; the continuation is review-gated after a classifier-only correction. No GitHub/Vercel publication or Vercel E2E has occurred.
 
 Evidence date: 2026-09-06 (Asia/Saigon)
 
@@ -10,16 +10,19 @@ Evidence date: 2026-09-06 (Asia/Saigon)
 |---|---|
 | Adapted source commit | `cd833b78b43e22661ade6a4dddad3fc4269eb07a` |
 | Adapted source SHA-256 | `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F` |
-| Adapted Studio deployment | None |
-| Adapted deployment hash | None |
-| Adapted live manifest | None |
+| Exact package HEAD | `897fa347e1e381290feee70e6bed79b9b3febf34` |
+| Adapted Studio deployment | `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D` |
+| Adapted deployment hash | `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5` (FINALIZED) |
+| Adapted create hash | `0xbaf652eb52d9ac8995e269d10028f4ae48f13cee760d6b82f17cd622e60fbcc9` (FINALIZED, MAJORITY_AGREE) |
+| Adapted live evidence | `docs/evidence/studio-rpc-run-1788639450020.json` (`BLOCKED_PARTIAL`, 21 requests, 2 hashes) |
+| Adapted read-only reconciliation | `docs/evidence/studio-adapted-partial-reconciliation-1788639450020.json` (`PASS`, id 1/count 1/revision 1/BASE_DRAFT) |
 | Adapted public ABI | 10 methods: 7 views and 3 writes |
 | Adapted deterministic terminal path | `freeze_case`: revision `3`, `DONE`, exact-signature result |
-| Adapted Studio account | `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (deployment/signing role; selected offline, no transaction) |
+| Adapted Studio account | `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (deployment/signing role) |
 | Local evidence | Direct Mode `13 passed`; frontend `42 passed`; frontend production build PASS; runner `node --check` PASS; wrong-endpoint fail-closed check PASS with zero requests |
-| Release boundary | No Studio RPC, GitHub/Vercel publication, or Vercel E2E has occurred |
+| Release boundary | No continuation write, GitHub/Vercel publication, or Vercel E2E has occurred; PRE_DEPLOY continuation review is pending |
 
-The adapted source requires a fresh exact-revision anonymous `PRE_DEPLOY` decision. Studio and frontend RPC ledgers remain separate; the current adapted runner is a proof artifact only until that decision exists.
+The first adapted run was authorized by the prior exact-revision PRE_DEPLOY approval. Its S3 status was blocked by an execution-result classifier defect, not by a failed contract receipt; the retained read-only reconciliation confirms the accepted state. The classifier/continuation delta at the current HEAD requires a targeted exact-revision reviewer decision before S4–S7 writes. Studio and frontend RPC ledgers remain separate.
 
 ## Historical superseded-source recovery (not current adapted source)
 

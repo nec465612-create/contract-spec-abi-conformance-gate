@@ -1,6 +1,6 @@
 # PRE_DEPLOY readiness
 
-Status: PRE_DEPLOY REBUILD IN PROGRESS — the approved deterministic-freeze adaptation removes the LLM/validator operation that produced the historical S6 timeout. The adapted source has no deployment or live evidence and requires a fresh exact-revision PRE_DEPLOY review. Historical Studio evidence is not reused as proof for the new source; GitHub/Vercel publication and Vercel E2E have not started.
+Status: ADAPTED STUDIO RUN BLOCKED_PARTIAL — the approved deterministic-freeze adaptation removes the LLM/validator operation that produced the historical S6 timeout. One exact adapted deployment and create are finalized and retained; the S3 classification correction and S4–S7 continuation require targeted exact-revision review. Historical Studio evidence is not reused as proof for this source; GitHub/Vercel publication and Vercel E2E have not started.
 
 ## Contract lifecycle classification
 
@@ -17,9 +17,9 @@ This classification is a release decision, not a claim that the contract survive
 | Network | GenLayer Studionet |
 | Chain ID | `61999` |
 | RPC | `https://studio.genlayer.com/api` |
-| Explorer | Pending adapted deployment after PRE_DEPLOY approval |
-| Contract address | Pending adapted deployment after PRE_DEPLOY approval |
-| Deployment transaction | Pending adapted deployment after PRE_DEPLOY approval |
+| Explorer | https://explorer-studio.genlayer.com/address/0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D |
+| Contract address | `0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D` |
+| Deployment transaction | `0xfceb8aa2abacfcdf8125482b2e3477ca422fdfb3f4460169dcc14fa45f048fd5` (FINALIZED) |
 | Exact source commit | `cd833b78b43e22661ade6a4dddad3fc4269eb07a` |
 | Exact source SHA-256 | `E68FF0728C24B26D31127D2FC4C6027350DA54EFAB5329623741EE3E67EFEB7F` (`contracts/main.py`) |
 | Constructor arguments | None (`__init__()` only) |
@@ -28,7 +28,7 @@ This classification is a release decision, not a claim that the contract survive
 | Studio deployer account | `0x4a12D259dbBe3909d076b5b46B6809999748Fbc7` (offline-selected disposable signer; public address only) |
 | Studio role | Deployment/signing account only; no upgrade role |
 
-The prior addresses and transactions remain historical evidence for superseded source bytes only. This draft does not authorize deployment: POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.
+The prior addresses and transactions remain historical evidence for superseded source bytes only. The adapted deployment above is not a release approval: the remaining continuation, POST_DEPLOY_TEST, GitHub/Vercel publication, Vercel E2E, final review, and Explorer submission remain separate gates. No private key, seed phrase, token, or credential belongs in this file.
 
 The live deployment/readback ledger and the separate Studio/frontend RPC status are in [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and [`docs/RPC-BUDGET.md`](docs/RPC-BUDGET.md).
 
