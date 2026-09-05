@@ -37,7 +37,7 @@ The single deployable contract exposes only:
 
 ## Technical choices and adaptations
 
-- Stable Studionet source header: `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }`. This was read from the live Studio `_hello_world.py` template and matches the current stable official documentation. The linter reports a newer runner, but it is not substituted because this Build targets stable Studionet and the current stable template remains authoritative.
+- Runtime identity: `0.39.2` is the pinned `genlayer` npm CLI target (`genlayer --version`), not a Python SDK version. The contract's GenVM runtime remains pinned by the stable `Depends` header `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }`; host Direct Mode tooling is recorded separately as `genlayer-py 0.16.3`, `genlayer-test 0.29.2`, and `genvm-linter 0.11.0`. See [`docs/RUNTIME-COMPATIBILITY.md`](docs/RUNTIME-COMPATIBILITY.md) for the exact decision and reproduction commands.
 - Contract form: `from genlayer import *`, exactly one `gl.Contract` subclass, class-body `u256` and fully instantiated `TreeMap` fields, no collection reassignment in `__init__`.
 - Consensus: one `gl.nondet.exec_prompt(..., response_format="json")` inside `gl.vm.run_nondet_unsafe`; each validator reruns the same bounded classification and compares the complete validated consequential label vector. No prose field is accepted or stored.
 - Address normalization (`SPEC.TECHNICAL_ADAPTATION`): public `Address` calldata may arrive as a runtime Address object or a 20-byte decoded value in current Direct Mode. One contract helper canonicalizes both to lowercase `0x` + 40 hex. This changes no product behavior and prevents environment-specific address failures.

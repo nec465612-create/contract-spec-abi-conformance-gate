@@ -30,6 +30,10 @@ This classification is a release decision, not a claim that the contract survive
 
 The manifest must be updated with the contract address and transaction hash after the corresponding gate allows deployment. No private key, seed phrase, token, or credential belongs in this file.
 
+## Runtime compatibility decision
+
+The exact package/runtime roles and the previously ambiguous `0.39.2` target are resolved in [`docs/RUNTIME-COMPATIBILITY.md`](docs/RUNTIME-COMPATIBILITY.md). In summary, `0.39.2` is the installed `genlayer` CLI version; the contract execution identity is its first-line `Depends` hash; and `genlayer-py 0.16.3`, `genlayer-test 0.29.2`, and `genvm-linter 0.11.0` are separately recorded host-side Direct Mode tools. This decision does not substitute a Python package version for the contract runtime and does not claim hosted Studio E2E.
+
 ## RPC economy and proof budget
 
 This plan applies both RPC layers: the released frontend and the primary-AI Studio/proof run. It is a budget and operating constraint, not live evidence.
