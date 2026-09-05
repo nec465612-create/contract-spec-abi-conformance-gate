@@ -1,6 +1,6 @@
 # Live verification
 
-Status: POST_DEPLOY_TEST CHANGES REQUIRED. The historical frozen Studio UI ledger remains non-reconstructable and is not treated as a PASS. The latest instrumented replacement finalized deployment/create/replace/freeze, then finalized `evaluate_case` as `MAJORITY_DISAGREE`; the authoritative state remains unchanged and Vercel browser E2E has not started.
+Status: POST_DEPLOY_TEST CHANGES REQUIRED. The historical frozen Studio UI ledger remains non-reconstructable and is not treated as a PASS. The latest instrumented replacement finalized deployment/create/replace/freeze, then finalized `evaluate_case` as `TIMEOUT`; the authoritative state remains unchanged and Vercel browser E2E has not started.
 
 Evidence date: 2026-09-05 (Asia/Saigon)
 
@@ -10,17 +10,17 @@ Evidence date: 2026-09-05 (Asia/Saigon)
 |---|---|
 | Current source commit | `de66367b459ed421b73bdfb7f3d04bf15088ed38` |
 | Current source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` |
-| Current Studio deployment | `0x8062B1F8e04F6b5146EaF7313075990A32C25906` |
-| Current deployment hash | `0x78673928b766a5a3574fad0320c48e921e06895b43a88adbd0492b447248e0b5` |
+| Current Studio deployment | `0x976E9e852C00FAbB4137DeaC50e475DE01B3A1F1` |
+| Current deployment hash | `0xef232017709f5b3109e3c3d7525077628b96f3397a55247b4481e5da7b9e1495` |
 | Current manifest | `BLOCKED_PARTIAL_CASE_ACCEPTED` |
-| Accepted case writes | create `0xed57d9...37d002`, replace `0xff4529...2afdff`, freeze `0x8c101c...352aec` |
-| Evaluate transaction | `0xa06c6e...b743fa`: FINALIZED, `MAJORITY_DISAGREE`, no state mutation |
+| Accepted case writes | create `0x78452b...30f9f4a`, replace `0x33caa1...ea0f97`, freeze `0x32afee...a06e533` |
+| Evaluate transaction | `0x64c579...80a5fca`: FINALIZED, `TIMEOUT`, no state mutation |
 | Current authoritative state | count `1`; case 1 revision `3`; `FROZEN`; last operation `freeze_case` |
-| Current full evidence | `studio-rpc-run-1788609388641.json`: 52 requests, 5 transactions, blocked at S6 |
-| Current sparse read | `studio-rpc-sparse-read-1788609592495.json`: finalized disagreement, 3 reads, no retry |
+| Current full evidence | `studio-rpc-run-1788610697042.json`: 52 requests, 5 transactions, blocked at S6 |
+| Current sparse read | `studio-rpc-sparse-read-1788610828786.json`: finalized timeout, 3 reads, no retry |
 | Release boundary | No GitHub/Vercel publication or Vercel E2E has occurred |
 
-The accepted owner-bound case creator key was not retained, so the current deployment is not resumed. The finalized evaluation disagreement is preserved as a failed live case with unchanged authoritative state; no evaluation retry was submitted. Studio and frontend RPC ledgers remain separate.
+The accepted owner-bound case creator key was not retained, so the current deployment is not resumed. The finalized evaluation timeout is preserved as a failed live case with unchanged authoritative state; no evaluation retry was submitted. Studio and frontend RPC ledgers remain separate.
 
 ## Historical frozen UI binding (not current measured run)
 

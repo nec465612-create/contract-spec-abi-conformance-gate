@@ -1,0 +1,60 @@
+{
+  "status": "PASS",
+  "kind": "SPARSE_AUTHORITATIVE_READ_AFTER_FINALIZED_TIMEOUT",
+  "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
+  "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
+  "chainId": 61999,
+  "endpoint": "https://studio.genlayer.com/api",
+  "contractAddress": "0x976E9e852C00FAbB4137DeaC50e475DE01B3A1F1",
+  "deploymentHash": "0xef232017709f5b3109e3c3d7525077628b96f3397a55247b4481e5da7b9e1495",
+  "transactionHashVariant": "latest-final",
+  "requestSequence": 3,
+  "requests": [
+    {
+      "operation": "sparse-read",
+      "method": "eth_getTransactionByHash",
+      "transactionHash": "0x64c5797c62daf1ecf76c3b53d4a604ada4b52464920ccfaac125955fe80a5fca",
+      "result": {
+        "status": 7,
+        "statusName": "FINALIZED",
+        "result": 3,
+        "resultName": "TIMEOUT",
+        "statusChanges": ["PENDING", "PROPOSING", "COMMITTING", "REVEALING", "VALIDATORS_TIMEOUT", "FINALIZED"],
+        "validatorVotes": ["TIMEOUT", "TIMEOUT", "IDLE", "TIMEOUT", "IDLE"]
+      }
+    },
+    {
+      "operation": "sparse-read",
+      "method": "gen_call",
+      "functionName": "get_count",
+      "result": "1"
+    },
+    {
+      "operation": "sparse-read",
+      "method": "gen_call",
+      "functionName": "get_case",
+      "args": ["1"],
+      "result": {
+        "accepted_attempts": 0,
+        "last_accepted_at": "0",
+        "last_operation": "freeze_case",
+        "outcome": "",
+        "phase": "FROZEN",
+        "revision": "3"
+      }
+    }
+  ],
+  "authoritativeState": {
+    "caseCount": "1",
+    "case1Revision": "3",
+    "case1Phase": "FROZEN",
+    "case1LastOperation": "freeze_case",
+    "evaluateTransactionStatus": "FINALIZED",
+    "evaluateResult": "TIMEOUT",
+    "validatorVotes": ["TIMEOUT", "TIMEOUT", "IDLE", "TIMEOUT", "IDLE"],
+    "caseWriteAccepted": false
+  },
+  "transactionCount": 0,
+  "note": "Read-only follow-up after evaluate_case finalized TIMEOUT; no evaluation retry or other state-changing transaction was submitted.",
+  "generatedAt": "2026-09-05T12:20:28.786Z"
+}
