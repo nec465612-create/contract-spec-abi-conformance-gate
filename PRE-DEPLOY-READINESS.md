@@ -1,6 +1,6 @@
 # PRE_DEPLOY readiness
 
-Status: POST_DEPLOY_TEST CHANGES REQUIRED — exact Studio deployment/E2E is complete, but RPC-STUDIO-001 remains open after anonymous review. GitHub/Vercel publication and Vercel E2E have not started.
+Status: PRE_DEPLOY BLOCKED / POST_DEPLOY_TEST CHANGES REQUIRED — RPC-STUDIO-001 is closed under the retrospective-legacy `OBSERVABLE_ACTION_LEDGER` rule. The retained S6 `TIMEOUT` evidence and external Studio readiness blocker remain separate and unresolved; GitHub/Vercel publication and Vercel E2E have not started.
 
 ## Contract lifecycle classification
 
