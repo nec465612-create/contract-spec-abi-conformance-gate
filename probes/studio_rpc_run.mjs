@@ -49,7 +49,9 @@ let source = null
 let sourceSha256 = null
 const requestedResumeHash = process.env.STUDIO_RESUME_DEPLOYMENT_HASH ?? null
 const requestedResumeAddress = process.env.STUDIO_RESUME_CONTRACT_ADDRESS ?? null
+const requestedRestart = process.env.STUDIO_RESTART_PARTIAL_RUN ?? null
 const RESUME_MODE = Boolean(requestedResumeHash || requestedResumeAddress)
+const RESTART_MODE = Boolean(requestedRestart)
 let resumeEvidenceSummary = null
 
 const base1 = {
@@ -120,6 +122,7 @@ function blockedEvidence(error, accountAddress = null) {
     rpcRequests: allEvents,
     requestSequence,
     resumeMode: RESUME_MODE,
+    restartMode: RESTART_MODE,
     resumeEvidence: resumeEvidenceSummary,
     error: { message: String(error), code: error?.code ?? null },
     generatedAt: new Date().toISOString(),
@@ -147,20 +150,28 @@ try {
   if (Boolean(requestedResumeHash) !== Boolean(requestedResumeAddress)) {
     throw new Error('Resume mode requires both STUDIO_RESUME_DEPLOYMENT_HASH and STUDIO_RESUME_CONTRACT_ADDRESS.')
   }
-  if (!RESUME_MODE) {
+  if (RESUME_MODE && RESTART_MODE) {
+    throw new Error('Resume mode and partial-run restart mode are mutually exclusive.')
+  }
+  if (RESTART_MODE && requestedRestart !== RUN_CONFIRM) {
+    throw new Error(`Set STUDIO_RESTART_PARTIAL_RUN=${RUN_CONFIRM} to authorize a replacement disposable run.`)
+  }
+  if (!RESUME_MODE && !RESTART_MODE) {
     try {
       await readFile(RESUME_MANIFEST_PATH, 'utf8')
-      throw new Error('A finalized partial deployment manifest exists; refusing a second deployment. Use the approved resume mode.')
+      throw new Error('A finalized partial deployment manifest exists; refusing a second deployment. Use the approved resume or explicit partial-run restart mode.')
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
     }
   }
-  if (RESUME_MODE) {
-    if (requestedResumeHash.toLowerCase() !== EXPECTED_RESUME_DEPLOYMENT_HASH.toLowerCase()) {
-      throw new Error(`Resume deployment hash is not the approved partial-run hash: ${requestedResumeHash}`)
-    }
-    if (requestedResumeAddress.toLowerCase() !== EXPECTED_RESUME_CONTRACT_ADDRESS.toLowerCase()) {
-      throw new Error(`Resume contract address is not the approved partial-run address: ${requestedResumeAddress}`)
+  if (RESUME_MODE || RESTART_MODE) {
+    if (RESUME_MODE) {
+      if (requestedResumeHash.toLowerCase() !== EXPECTED_RESUME_DEPLOYMENT_HASH.toLowerCase()) {
+        throw new Error(`Resume deployment hash is not the approved partial-run hash: ${requestedResumeHash}`)
+      }
+      if (requestedResumeAddress.toLowerCase() !== EXPECTED_RESUME_CONTRACT_ADDRESS.toLowerCase()) {
+        throw new Error(`Resume contract address is not the approved partial-run address: ${requestedResumeAddress}`)
+      }
     }
     const manifest = JSON.parse(await readFile(RESUME_MANIFEST_PATH, 'utf8'))
     if (
@@ -180,6 +191,7 @@ try {
       manifest: 'docs/evidence/studio-rpc-recovery-manifest.json',
       deploymentHash: EXPECTED_RESUME_DEPLOYMENT_HASH,
       contractAddress: EXPECTED_RESUME_CONTRACT_ADDRESS,
+      mode: RESTART_MODE ? 'replacement' : 'resume',
       priorRequestSequence: manifest.priorRun?.requestSequence ?? null,
       priorTransactionCount: manifest.priorRun?.transactionCount ?? null,
       priorBlockedAt: manifest.priorRun?.blockedAt ?? null,
@@ -350,12 +362,25 @@ function isFinalized(transaction) {
   return transaction?.statusName === 'FINALIZED' || transaction?.status === 7 || transaction?.status === '7'
 }
 
+function executionResultValues(transaction) {
+  return [
+    transaction?.txExecutionResultName,
+    transaction?.txExecutionResult,
+    transaction?.execution_result,
+    transaction?.executionResult,
+    ...(transaction?.consensus_data?.leader_receipt ?? []).map((receipt) => receipt?.execution_result),
+    ...(transaction?.consensus_data?.validators ?? []).map((validator) => validator?.execution_result),
+  ].filter((value) => value !== undefined && value !== null)
+}
+
 function isExecutionSuccess(transaction) {
-  return transaction?.txExecutionResultName === 'FINISHED_WITH_RETURN' || transaction?.txExecutionResult === 1
+  const values = executionResultValues(transaction)
+  return values.length > 0 && values.every((value) => value === 'FINISHED_WITH_RETURN' || value === 'SUCCESS' || value === 1 || value === '1')
 }
 
 function isExecutionError(transaction) {
-  return transaction?.txExecutionResultName === 'FINISHED_WITH_ERROR' || transaction?.txExecutionResult === 2
+  const values = executionResultValues(transaction)
+  return values.length > 0 && values.every((value) => value === 'FINISHED_WITH_ERROR' || value === 'USER_ERROR' || value === 'ERROR' || value === 2 || value === '2')
 }
 
 function hasExpectedStaleError(transaction) {
@@ -610,6 +635,7 @@ try {
     rpcRequests: allEvents,
     requestSequence,
     resumeMode: RESUME_MODE,
+    restartMode: RESTART_MODE,
     resumeEvidence: resumeEvidenceSummary,
     operationRequestCaps: OPERATION_REQUEST_CAPS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
