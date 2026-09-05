@@ -1,0 +1,50 @@
+{
+  "status": "PASS",
+  "kind": "SPARSE_AUTHORITATIVE_READ_AFTER_FINALIZED_MAJORITY_DISAGREE",
+  "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
+  "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
+  "chainId": 61999,
+  "endpoint": "https://studio.genlayer.com/api",
+  "contractAddress": "0x8062B1F8e04F6b5146EaF7313075990A32C25906",
+  "deploymentHash": "0x78673928b766a5a3574fad0320c48e921e06895b43a88adbd0492b447248e0b5",
+  "transactionHashVariant": "latest-final",
+  "requestSequence": 3,
+  "requests": [
+    {
+      "operation": "sparse-read",
+      "method": "eth_getTransactionByHash",
+      "transactionHash": "0xa06c6e9e269d41322782d4ee57d007bcc75eb3d0d46316a03c5794045cb743fa",
+      "result": {
+        "status": 7,
+        "statusName": "FINALIZED",
+        "result": 7,
+        "resultName": "MAJORITY_DISAGREE"
+      }
+    },
+    {
+      "operation": "sparse-read",
+      "method": "gen_call",
+      "functionName": "get_count",
+      "result": "1"
+    },
+    {
+      "operation": "sparse-read",
+      "method": "gen_call",
+      "functionName": "get_case",
+      "args": ["1"],
+      "result": "{\"accepted_attempts\":0,\"base\":{\"abi\":[{\"inputs\":[],\"name\":\"check_v2\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"}],\"requirements\":[{\"id\":\"read\",\"polarity\":\"REQUIRED\",\"text\":\"Expose a stable read operation\"}]},\"base_locked\":true,\"create_hash\":\"ab143f6453320bbcfc20d84050c85a8dbaaccd23b30c877dcedde44f035ccfcd\",\"domain\":{},\"id\":\"1\",\"last_accepted_at\":\"0\",\"last_operation\":{\"args_hash\":\"cc3f2a1ffd63c4db19e0114b93a94b774e4a2d07a2a5ec5b193303ac1387d633\",\"caller\":\"0xb22f7be62a6ee94bef34702b09ead9d229b974a8\",\"method\":\"freeze_case\"},\"outcome\":\"\",\"parent\":\"0\",\"phase\":\"FROZEN\",\"primary\":\"0xb22f7be62a6ee94bef34702b09ead9d229b974a8\",\"response\":{},\"response_locked\":true,\"result\":{},\"revision\":\"3\",\"secondary\":\"0xb22f7be62a6ee94bef34702b09ead9d229b974a8\",\"v\":1}"
+    }
+  ],
+  "authoritativeState": {
+    "caseCount": "1",
+    "case1Revision": "3",
+    "case1Phase": "FROZEN",
+    "case1LastOperation": "freeze_case",
+    "evaluateTransactionStatus": "FINALIZED",
+    "evaluateResult": "MAJORITY_DISAGREE",
+    "caseWriteAccepted": false
+  },
+  "transactionCount": 0,
+  "note": "Read-only follow-up after evaluate_case finalized MAJORITY_DISAGREE; no evaluation retry or other state-changing transaction was submitted.",
+  "generatedAt": "2026-09-05T11:59:52.495Z"
+}

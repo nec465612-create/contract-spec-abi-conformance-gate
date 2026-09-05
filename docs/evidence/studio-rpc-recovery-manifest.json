@@ -5,9 +5,9 @@
   "chainId": 61999,
   "endpoint": "https://studio.genlayer.com/api",
   "deployment": {
-    "hash": "0xe2307ea2f953e61c8963cce50225b420b5908652622c7396524c5a7773372509",
-    "contractAddress": "0xa84f59Fb13056DF9707D4c0aaFFc730ec275afC5",
-    "account": "0xC99431AF98c3A0a476b43155e91a1695dc3744f5",
+    "hash": "0x78673928b766a5a3574fad0320c48e921e06895b43a88adbd0492b447248e0b5",
+    "contractAddress": "0x8062B1F8e04F6b5146EaF7313075990A32C25906",
+    "account": "0xB22F7be62A6eE94bEF34702B09EaD9d229B974a8",
     "status": "FINALIZED",
     "sourceReadbackSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45"
   },
@@ -20,51 +20,65 @@
     "fullEvidenceFile": "studio-rpc-run-1788605236819.json"
   },
   "latestPartialRun": {
-    "account": "0x9bF946ce0D0D02232176EbbAdc2C5dE1031a8BAA",
-    "requestSequence": 21,
-    "transactionCount": 3,
-    "blockedAt": "S4-replace-case1",
-    "error": "replace_base finalized with MAJORITY_AGREE and three SUCCESS validators; the runner stopped because one idle validator cancellation was not yet excluded from execution classification.",
-    "fullEvidenceFile": "studio-rpc-run-1788607357538.json",
-    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788607499448.json",
+    "account": "0xB22F7be62A6eE94bEF34702B09EaD9d229B974a8",
+    "requestSequence": 52,
+    "transactionCount": 5,
+    "blockedAt": "S6-evaluate-case1",
+    "error": "evaluate_case finalized after the bounded polls as MAJORITY_DISAGREE with four validator execution SUCCESS results and a read-only follow-up confirmed that case 1 remained FROZEN at revision 3; no evaluation retry was submitted.",
+    "fullEvidenceFile": "studio-rpc-run-1788609388641.json",
+    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788609592495.json",
     "sparseAuthoritativeRead": {
       "transactionHashVariant": "latest-final",
+      "evaluateHash": "0xa06c6e9e269d41322782d4ee57d007bcc75eb3d0d46316a03c5794045cb743fa",
+      "evaluateStatus": "FINALIZED",
+      "evaluateResult": "MAJORITY_DISAGREE",
       "methods": ["get_count", "get_case"],
       "caseCount": "1",
-      "case1Revision": "2"
+      "case1Revision": "3",
+      "case1Phase": "FROZEN",
+      "case1LastOperation": "freeze_case"
     }
   },
   "partialCase": {
     "caseId": "1",
-    "creator": "0xb7e803f91336AA8646D7aD6E90327C3811c583D2",
-    "createHash": "0xea49bcddb897baf6dbd63d9daedb058e43810192fb36bbb2731f0e34df2ebef6",
+    "creator": "0xB22F7be62A6eE94bEF34702B09EaD9d229B974a8",
+    "createHash": "0xed57d901f3e45c6977d4745a1b2288bff4b5146159f7a2a28cf096a2da37d002",
     "createReceiptStatus": "FINALIZED",
     "createConsensus": "MAJORITY_AGREE",
-    "replaceHash": "0x17fd393deab82cc312951d2aa58db117507f63ffddb5745510529c56816eafe8",
+    "replaceHash": "0xff4529e24c777343290abc63307eeb302af090d5504a0de00b597133b52afdff",
     "replaceReceiptStatus": "FINALIZED",
     "replaceConsensus": "MAJORITY_AGREE",
-    "replaceValidatorExecution": ["ERROR:CONSENSUS_VALIDATOR_QUORUM_REACHED", "SUCCESS", "SUCCESS", "SUCCESS"],
+    "freezeHash": "0x8c101cde38f6172f2171637d65ef28fc1b6907820d40747da3a5810f5a352aec",
+    "freezeReceiptStatus": "FINALIZED",
+    "freezeConsensus": "MAJORITY_AGREE",
+    "evaluateHash": "0xa06c6e9e269d41322782d4ee57d007bcc75eb3d0d46316a03c5794045cb743fa",
+    "evaluateReceiptStatus": "FINALIZED",
+    "evaluateConsensus": "MAJORITY_DISAGREE",
+    "evaluateValidatorExecution": ["SUCCESS", "SUCCESS", "SUCCESS", "SUCCESS"],
+    "stateReadbackFile": "studio-rpc-sparse-read-1788609592495.json",
+    "stateReadback": "case count 1; revision 3; FROZEN; last operation freeze_case; evaluate_case finalized MAJORITY_DISAGREE without mutation",
+    "ownerKeyRecovery": "not retained",
+    "nextAction": "No retry of evaluate_case; any further replacement requires a new exact PRE_DEPLOY review."
+  },
+  "previousAcceptedPartial": {
+    "deploymentHash": "0xe2307ea2f953e61c8963cce50225b420b5908652622c7396524c5a7773372509",
+    "contractAddress": "0xa84f59Fb13056DF9707D4c0aaFFc730ec275afC5",
+    "account": "0xb7e803f91336AA8646D7aD6E90327C3811c583D2",
+    "createHash": "0xea49bcddb897baf6dbd63d9daedb058e43810192fb36bbb2731f0e34df2ebef6",
+    "replaceHash": "0x17fd393deab82cc312951d2aa58db117507f63ffddb5745510529c56816eafe8",
     "stateReadbackFile": "studio-rpc-sparse-read-1788607499448.json",
     "stateReadback": "case count 1; revision 2; BASE_DRAFT; last operation replace_base",
     "ownerKeyRecovery": "not retained"
   },
-  "latestReplacementAttempt": {
+  "rateLimitedReplacementAttempt": {
     "status": "BLOCKED",
     "account": "0x1b27A617565E1A27f380ef82233bf65915B724Bd",
     "requestSequence": 1,
     "transactionCount": 0,
     "blockedAt": "S0-funding",
     "retryAfterSeconds": 31,
-    "error": "The one reviewed replacement attempt was blocked at sim_fundAccount by HTTP 429; no replacement deployment or state-changing transaction was submitted.",
     "fullEvidenceFile": "studio-rpc-run-1788608380680.json",
-    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788608456363.json",
-    "sparseAuthoritativeRead": {
-      "methods": ["get_count", "get_case"],
-      "caseCount": "1",
-      "case1Revision": "2",
-      "case1Phase": "BASE_DRAFT",
-      "case1LastOperation": "replace_base"
-    }
+    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788608456363.json"
   },
   "supersededRecovery": {
     "status": "BLOCKED_PARTIAL_CASE_ACCEPTED",
