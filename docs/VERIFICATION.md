@@ -8,7 +8,6 @@ Evidence date: 2026-09-05 (Asia/Saigon)
 
 | Field | Value |
 |---|---|
-| Current evidence HEAD | `b99dd77d5dab7bd77909bd5a5e32bfee95bc6505` |
 | Current source commit | `de66367b459ed421b73bdfb7f3d04bf15088ed38` |
 | Current source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` |
 | Current Studio deployment | `0xa84f59Fb13056DF9707D4c0aaFFc730ec275afC5` |
