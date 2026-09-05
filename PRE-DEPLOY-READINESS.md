@@ -20,15 +20,15 @@ This classification is a release decision, not a claim that the contract survive
 | Explorer | `https://genlayer-explorer.vercel.app` |
 | Contract address | Not deployed |
 | Deployment transaction | Not submitted |
-| Exact source commit | Fill at the correction commit before review |
-| Exact source SHA-256 | Fill at the correction commit before review |
+| Exact source commit | `bf890bdb7a341f5d1ebfc79031a20daa22252393` (correction commit; contract/frontend bytes) |
+| Exact source SHA-256 | `AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45` (`contracts/main.py`) |
 | Constructor arguments | None (`__init__()` only) |
 | Linked contracts | None |
 | Upgrade authority | None by intentional-freeze design |
 | Studio deployer account | `0xeF5D2119416A2f5afa35dCFA209766EFC1BE5902` (selected in the current Studio session; public address only) |
 | Studio role | Deployment/signing account only; no upgrade role |
 
-The manifest must be updated with the public Studio account, exact correction commit, source hash, contract address, and transaction hash after the corresponding gate allows each action. No private key, seed phrase, token, or credential belongs in this file.
+The manifest must be updated with the contract address and transaction hash after the corresponding gate allows deployment. No private key, seed phrase, token, or credential belongs in this file.
 
 ## Recovery limits and runbook
 
