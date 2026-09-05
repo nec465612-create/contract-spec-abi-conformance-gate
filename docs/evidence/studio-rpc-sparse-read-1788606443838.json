@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "kind": "SPARSE_AUTHORITATIVE_READ_AFTER_RATE_LIMIT",
+  "sourceCommit": "de66367b459ed421b73bdfb7f3d04bf15088ed38",
+  "sourceSha256": "AA023CABE575E346739C51DA0C49A6C77BE8ED4DB3C035A23AFDFC32D894BE45",
+  "chainId": 61999,
+  "endpoint": "https://studio.genlayer.com/api",
+  "contractAddress": "0xa84f59Fb13056DF9707D4c0aaFFc730ec275afC5",
+  "deploymentHash": "0xe2307ea2f953e61c8963cce50225b420b5908652622c7396524c5a7773372509",
+  "transactionHashVariant": "latest-final",
+  "requestSequence": 1,
+  "requests": [
+    {
+      "operation": "sparse-read",
+      "method": "gen_call",
+      "functionName": "get_count",
+      "result": "0"
+    }
+  ],
+  "authoritativeState": {
+    "caseCount": "0",
+    "caseWriteAccepted": false
+  },
+  "transactionCount": 0,
+  "note": "Read-only follow-up after the exact resume runner was blocked at S3 by HTTP 429; no state-changing retry was performed.",
+  "generatedAt": "2026-09-05T11:07:23.838Z"
+}

@@ -19,6 +19,21 @@
     "retryAfterSeconds": 5,
     "fullEvidenceFile": "studio-rpc-run-1788605236819.json"
   },
+  "latestResumeAttempt": {
+    "account": "0x9bF946ce0D0D02232176EbbAdc2C5dE1031a8BAA",
+    "requestSequence": 10,
+    "transactionCount": 1,
+    "blockedAt": "S3-create-case1",
+    "error": "Studio blocked eth_sendRawTransaction with HTTP 429 (30 requests per minute); no case write was accepted.",
+    "retryAfterSeconds": 46,
+    "fullEvidenceFile": "studio-rpc-run-1788606288514.json",
+    "sparseAuthoritativeReadFile": "studio-rpc-sparse-read-1788606443838.json",
+    "sparseAuthoritativeRead": {
+      "transactionHashVariant": "latest-final",
+      "method": "get_count",
+      "caseCount": "0"
+    }
+  },
   "supersededRecovery": {
     "status": "BLOCKED_PARTIAL_CASE_ACCEPTED",
     "deploymentHash": "0x97528dceedc0ac37a1fdabe51a9447598cbbb367ff3ea766d2b32e75fc720b84",
