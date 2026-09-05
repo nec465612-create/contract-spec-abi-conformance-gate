@@ -32,6 +32,18 @@ Studio evidence must report actual requests separately from transactions. The pl
 
 ## STUDIO RPC BUDGET EVIDENCE
 
+### Measured disposable-run instrument
+
+The frozen UI run could not be repaired because its request ledger was never retained. A fresh disposable run is therefore instrumented before any new deployment by [probes/studio_rpc_run.mjs](../probes/studio_rpc_run.mjs). It verifies the exact reviewed source commit/hash, creates one ephemeral account, counts every JSON-RPC method through the installed GenLayerJS transport, records HTTP status, duration, `Retry-After`, terminal result, transaction hash, and readback boundary, and writes a machine-readable evidence file under `docs/evidence/`. It stops on a request-budget overflow, rate limit, finality timeout, or semantic/readback mismatch; it never resubmits a write.
+
+The runner's explicit S0–S12 sequence is: disposable funding, chain/account preflight, source schema, one deployment, case-1 create/replace/freeze/evaluate, stale negative, case-2 create/freeze/evaluate, one cooldown-respecting retry, and retained-hash reconciliation. The unknown fixture is the exact prior case-2 fixture: the requirement intentionally asks about an external policy absent from the input and ABI, so the expected result is `UNKNOWN`. The command is:
+
+```text
+STUDIO_RUN_CONFIRM=CONTRACT_SPEC_ABI_CONFORMANCE_GATE_STUDIO_MEASURED_RUN node probes/studio_rpc_run.mjs
+```
+
+This runner is preparation only until a fresh exact-revision PRE_DEPLOY gate authorizes the disposable deployment. The historical rows below remain unchanged and still do not claim measurements from the frozen UI run.
+
 ### Live status
 
 The Studio run produced exactly one deployment and nine unique contract calls, all with retained hashes and Explorer lifecycle confirmation. The transaction count is therefore measured exactly. The Studio UI did not preserve a structured per-operation request ledger that could be exported after the run; the raw UI captures expose automatic sim_fundAccount session/account rows and a later 30 requests per minute rate-limit message, but not a complete historic request count for each receipt, poll, or readback. Those automatic funding rows were not user-triggered actions. Replaying the run to manufacture a count is forbidden by the one-deploy and unique-write rule.
