@@ -175,7 +175,7 @@ try {
     }
     const manifest = JSON.parse(await readFile(RESUME_MANIFEST_PATH, 'utf8'))
     if (
-      manifest.status !== 'BLOCKED_PARTIAL' ||
+      !['BLOCKED_PARTIAL', 'BLOCKED_PARTIAL_CASE_ACCEPTED'].includes(manifest.status) ||
       manifest.sourceCommit !== EXPECTED_SOURCE_COMMIT ||
       manifest.sourceSha256 !== EXPECTED_SOURCE_SHA256 ||
       manifest.chainId !== 61999 ||
@@ -187,11 +187,15 @@ try {
     ) {
       throw new Error('Resume manifest does not match the approved finalized deployment.')
     }
+    if (RESUME_MODE && manifest.status !== 'BLOCKED_PARTIAL') {
+      throw new Error('The approved partial deployment already has an accepted owner-bound case write; resume is unavailable. Use the explicit partial-run restart mode.')
+    }
     resumeEvidenceSummary = {
       manifest: 'docs/evidence/studio-rpc-recovery-manifest.json',
       deploymentHash: EXPECTED_RESUME_DEPLOYMENT_HASH,
       contractAddress: EXPECTED_RESUME_CONTRACT_ADDRESS,
       mode: RESTART_MODE ? 'replacement' : 'resume',
+      manifestStatus: manifest.status,
       priorRequestSequence: manifest.priorRun?.requestSequence ?? null,
       priorTransactionCount: manifest.priorRun?.transactionCount ?? null,
       priorBlockedAt: manifest.priorRun?.blockedAt ?? null,
