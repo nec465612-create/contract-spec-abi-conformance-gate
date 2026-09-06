@@ -57,6 +57,8 @@ function friendlyError(error: unknown): string {
     return 'Local transaction recovery is unavailable. No action was submitted.'
   }
   if (error instanceof Error) {
+    const coordinatorCode = 'code' in error && typeof error.code === 'string' ? error.code : ''
+    if (/^[A-Z][A-Z0-9_]{2,64}$/.test(coordinatorCode)) return `Transaction verification stopped at ${coordinatorCode}. Do not resubmit; preserve the transaction hash.`
     if (error instanceof RpcBudgetError) return error.message
     if (error.message.includes('JOURNAL_ERROR:JOURNAL_LOCK_UNAVAILABLE')) return 'Local transaction recovery is unavailable because the exclusive browser lock could not be acquired. No action was submitted.'
     if (error.message.includes('JOURNAL_ERROR:INVALID_JOURNAL_TRANSITION')) return 'The retained transaction is in an invalid recovery state. Keep its hash and export the journal before taking any further action.'
