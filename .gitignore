@@ -11,3 +11,11 @@ frontend/dist/
 docs/evidence/studio-rpc-run-*.json
 .env*
 !.env.example
+docs/preflight/
+AGENTS.md
+CLAUDE.md
+RESEARCH-HANDOFF.md
+SPECIFICATION.md
+STAGE-1.md
+STAGE-2.md
+PRE-DEPLOY-READINESS.md
