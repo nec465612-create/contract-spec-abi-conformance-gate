@@ -111,6 +111,10 @@ function safeErrorMessage(error: unknown): string {
   return 'The transaction could not be verified. It remains available for reconciliation.'
 }
 
+function safeDiagnosticCode(message: string): string {
+  return /^[A-Z][A-Z0-9_:-]{2,96}$/.test(message) ? message : 'READBACK_UNCERTAIN'
+}
+
 function rpcWriteErrorMessage(): string {
   return 'The chain RPC is temporarily rate-limited or unavailable. The transaction hash is retained; wait and reconcile later without resubmitting.'
 }
@@ -322,11 +326,12 @@ export async function reconcileJournalEntry<TReadback>(
     return { hash: entry.tx_hash as `0x${string}`, receipt, readback: result, journal: verified }
   } catch (error) {
     await preserveUncertain(store, entry)
+    const diagnostic = error instanceof RpcBudgetError ? rpcWriteErrorMessage() : safeErrorMessage(error)
     emitProgress(onProgress, 'RECONCILIATION_REQUIRED', {
       hash: entry.tx_hash as `0x${string}`,
-      message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The finalized transaction needs authoritative reconciliation.',
+      message: error instanceof RpcBudgetError ? rpcWriteErrorMessage() : diagnostic,
     })
-    throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : 'READBACK_UNCERTAIN', error instanceof RpcBudgetError ? rpcWriteErrorMessage() : 'The transaction finalized, but its authoritative state is not visible yet.')
+    throw new WriteCoordinatorError(error instanceof RpcBudgetError ? 'RPC_UNAVAILABLE' : safeDiagnosticCode(diagnostic), error instanceof RpcBudgetError ? rpcWriteErrorMessage() : diagnostic)
   }
 }
 
