@@ -6,7 +6,7 @@ import {
   parseJsonStrict,
   type CaseRecord,
 } from './chain/contract'
-import { assertWalletContext, contractAddress, genlayerChain, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
+import { assertWalletContext, contractAddress, genlayerChain, getReadClient, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
 import { executeContractWrite, reconcileJournalEntry, writeIntent, type WriteProgress } from './chain/write-coordinator'
 import { createRpcAttemptBudget, RpcBudgetError, type RpcAttemptBudget } from './chain/rpc'
 import { JournalError, JournalStore, type JournalEntry } from './persistence/journal'
@@ -625,7 +625,7 @@ export default function App() {
       setError('This pending action belongs to another network context and is read-only here.')
       return
     }
-    const recoveryGateway = new ContractGateway(entry.contract)
+    const recoveryGateway = new ContractGateway(entry.contract, getReadClient(entry.account as ContractAddress))
     const reconcileKey = `reconcile:${entry.reservation}`
     const controller = new AbortController()
     writeAbortRef.current = controller

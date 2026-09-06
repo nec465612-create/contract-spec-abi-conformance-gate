@@ -44,7 +44,7 @@ export async function assertWalletContext(provider: WalletProvider, account: Con
   }
 }
 
-let readClient: GenLayerClient | null = null
+const readClients = new Map<string, GenLayerClient>()
 let writeClient: GenLayerClient | null = null
 let writeClientKey = ''
 let writeClientProvider: Eip1193Provider | null = null
@@ -53,11 +53,17 @@ function clientEndpoint(): Pick<CreateClientConfig, 'endpoint'> {
   return rpcEndpoint ? { endpoint: rpcEndpoint } : {}
 }
 
-export function getReadClient(): GenLayerClient {
-  if (!readClient) {
-    readClient = createClient({ chain: genlayerChain, ...clientEndpoint() })
-  }
-  return readClient
+export function getReadClient(account?: ContractAddress): GenLayerClient {
+  const key = account?.toLowerCase() ?? ''
+  const existing = readClients.get(key)
+  if (existing) return existing
+  const client = createClient({
+    chain: genlayerChain,
+    ...(account ? { account: account as Address } : {}),
+    ...clientEndpoint(),
+  })
+  readClients.set(key, client)
+  return client
 }
 
 export function getWriteClient(provider: Eip1193Provider, account: ContractAddress): GenLayerClient {
