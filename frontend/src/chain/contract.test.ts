@@ -66,13 +66,16 @@ describe('contract read boundary', () => {
     const page = (id: string): CasePage => ({ ids: [id], next: '0' })
     const firstClient = {
       chain: { id: 61999 },
-      readContract: vi.fn(async () => page('first')),
+      readContract: vi.fn(async (request: { account?: unknown }) => {
+        expect(request.account).toEqual({ address, type: 'json-rpc' })
+        return page('first')
+      }),
     } as unknown as GenLayerClient
     const secondClient = {
       chain: { id: 61999 },
       readContract: vi.fn(async () => page('second')),
     } as unknown as GenLayerClient
-    const firstGateway = new ContractGateway(address, firstClient)
+    const firstGateway = new ContractGateway(address, firstClient, address)
     const secondGateway = new ContractGateway(address, secondClient)
 
     const [first, duplicate, second] = await Promise.all([

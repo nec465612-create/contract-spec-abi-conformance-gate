@@ -434,13 +434,16 @@ export class ContractGateway {
   constructor(
     private readonly address: ContractAddress,
     private readonly readClient: GenLayerClient = getReadClient(),
+    private readonly readAccount?: ContractAddress,
   ) {
     this.cache = sharedCacheFor(this.readClient, address)
   }
 
   private async read(functionName: string, args: CalldataEncodable[], budget?: RpcAttemptBudget): Promise<unknown> {
     const key = `${this.readClient.chain.id}:${this.address.toLowerCase()}:${functionName}:${stableStringify(args)}`
+    const account = this.readAccount ? { address: this.readAccount as Address, type: 'json-rpc' as const } : undefined
     return this.cache.get(key, () => withRpcRetry(() => sharedRpcReadQueue.run(() => this.readClient.readContract({
+        ...(account ? { account } : {}),
         address: this.address as Address,
         functionName,
         args,
