@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { sameAddress, WalletChooser } from './App'
+import { friendlyError, sameAddress, WalletChooser } from './App'
 import type { WalletOption } from './wallet/types'
 
 describe('wallet chooser', () => {
@@ -26,5 +26,13 @@ describe('wallet chooser', () => {
 describe('transaction recovery identity', () => {
   it('matches checksum and normalized forms of the same wallet address', () => {
     expect(sameAddress('0xe8D6C55838C39301c11D54fC9A38B9de298329F6', '0xe8d6c55838c39301c11d54fc9a38b9de298329f6')).toBe(true)
+  })
+})
+
+describe('transaction error guidance', () => {
+  it('does not claim a hash exists when the wallet rejects before submission', () => {
+    const error = Object.assign(new Error('The wallet request was cancelled.'), { code: 'USER_REJECTED' })
+
+    expect(friendlyError(error)).toBe('The wallet request was cancelled before submission. No transaction hash was created; retry only when you are ready to sign.')
   })
 })

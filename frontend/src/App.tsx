@@ -53,7 +53,7 @@ function shortenAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`
 }
 
-function friendlyError(error: unknown): string {
+export function friendlyError(error: unknown): string {
   if (error instanceof JournalError) {
     if (error.code === 'PENDING_CONFLICT') return 'A matching action is already awaiting confirmation. Refresh the case before trying again.'
     if (error.code === 'JOURNAL_LOCK_UNAVAILABLE') return 'This browser cannot safely recover pending actions. Use a browser with transaction recovery enabled.'
@@ -63,6 +63,7 @@ function friendlyError(error: unknown): string {
   }
   if (error instanceof Error) {
     const coordinatorCode = 'code' in error && typeof error.code === 'string' ? error.code : ''
+    if (coordinatorCode === 'USER_REJECTED') return 'The wallet request was cancelled before submission. No transaction hash was created; retry only when you are ready to sign.'
     if (/^[A-Z][A-Z0-9_]{2,64}$/.test(coordinatorCode)) return `Transaction verification stopped at ${coordinatorCode}. Do not resubmit; preserve the transaction hash.`
     if (error instanceof RpcBudgetError) return error.message
     if (error.message.includes('JOURNAL_ERROR:JOURNAL_LOCK_UNAVAILABLE')) return 'Local transaction recovery is unavailable because the exclusive browser lock could not be acquired. No action was submitted.'
