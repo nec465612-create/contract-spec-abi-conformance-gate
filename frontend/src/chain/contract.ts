@@ -369,6 +369,7 @@ export function deterministicEvaluation(base: BaseSpec): { result: { v: 1; label
 function normalizedInteger(value: unknown): string {
   if (typeof value === 'bigint') return value.toString()
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value)
+  if (typeof value === 'string' && /^0x[0-9a-f]+$/i.test(value)) return BigInt(value).toString()
   if (typeof value === 'string' && /^\d+$/.test(value)) return String(BigInt(value))
   throw new Error('INVALID_INTEGER_RETURN')
 }
