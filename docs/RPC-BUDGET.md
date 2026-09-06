@@ -209,18 +209,19 @@ Each captured event is normalized to this schema before evidence is accepted: `{
 
 The exported ledger is joined to the explicit action journal by row and chronological sequence. It must contain F0 with zero chain events, every F1–F5 read/retry/provider event, the controlled F6 retained-hash receipt/readback events, and F7 with no hidden polling. Its summary records per-row `plannedMaximum`, `actualChainRequests`, `actualProviderRequests`, `providerEvents`, `cacheHits`, `cacheMisses`, `retryAttempts`, `retryAfterValues`, `receiptCalls`, `readbackCalls`, `transactionHashes`, and `transactionCount`; every field is concrete, never `UNKNOWN` or `NOT MEASURED`. The app-owned event export, action journal, summary, prior blocked-platform artifact and browser observations are retained together and bound to the exact release URL and source HEAD. No HAR claim is made when the browser backend disables CDP/network export.
 
-### Current status
+### Current measured status
 
-The first public Vercel browser run completed the functional journey and retained three unique verified hashes, but ended `BLOCKED_PLATFORM` because the Chrome backend disabled HAR/CDP and no physical request count could be recovered. Exact evidence is `docs/evidence/vercel-e2e-observable-action-ledger-20260906171836.json`; no write will be replayed to fill that gap. The repair adds release-owned measurement at the shared client/provider boundaries, concrete export summaries, and regression coverage. A new exact-revision approval and deployment are required before one new unique measured journey; the old hashes remain immutable evidence only.
+The exact final Vercel release completed the measured critical journey on source `4bdd4f669fb83c9f98887ddae41bcbb7833ec834`, deployment `dpl_5BFvjqCAL4cZ5gEzwz7bZEmtYcec`, and `https://contract-spec-abi-conformance-gate-qnksbt1yw-nec10.vercel.app/`. The release-owned ledger retained all 30 provider/chain events without parameters or account results. The controlled post-terminal reload preserved two `VERIFIED` journal rows, exposed only OKX Wallet, reconnected the same account, and issued no replacement write. Exact event and summary evidence is `docs/evidence/vercel-e2e-rpc-evidence-20260907.json`; the earlier blocked-platform artifact remains immutable historical evidence.
 
-### PRE_DEPLOY evidence template (not run)
+| Workflow | Explicit actions | Per-action cap | Actual requests | Cache hits / misses | Retry attempts | Polls | Transaction hash | Receipt calls | Readback calls | Transactions | Result |
+|---|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---|
+| F0 | 1 | 0 | 0 | 0 / 0 | 0 | 0 | n/a | 0 | 0 | 0 | PASS |
+| F1 | 2 | 1 | 2 | 0 / 2 | 0 | 0 | n/a | 0 | 2 | 0 | PASS; one call per explicit refresh, including post-reload verification |
+| F2 | 1 | 1 | 1 | 0 / 1 | 0 | 0 | n/a | 0 | 1 | 0 | PASS |
+| F3 | 2 | 3 | 6 | 0 / 0 | 0 | 0 | n/a | 0 | 0 | 0 | PASS; three provider calls per explicit connection |
+| F4 | 1 | 11 | 11 | 0 / 8 | 0 | 3 | `0x6442afeaacc1edcef4e1346d7606e18798561f802058746e3983822b0be859c3` | 3 | 2 | 1 | PASS; case #10 revision 1 verified |
+| F5 | 1 | 11 | 10 | 0 / 7 | 0 | 3 | `0x8081a94315c879e264511fc4efed7d613040819b65dbccc76a5344180c7bc845` | 3 | 1 | 1 | PASS; case #10 revision 2 is DONE, CONFORMANT, IMPLEMENTS, frozen and locked |
+| F6 | 0 | 3 | 0 | 0 / 0 | 0 | 0 | n/a | 0 | 0 | 0 | PASS; both hashes were terminal before reload, so reconciliation RPC was correctly not exercised |
+| F7 | 1 | 0 | 0 | 0 / 0 | 0 | 0 | n/a | 0 | 0 | 0 | PASS; no hidden polling |
 
-Required for the exact final release and Vercel E2E gate. The current PRE_DEPLOY package has no public release or live measurement, so these rows remain explicitly unmeasured.
-
-| Exact release / source commit | Workflow ID | Trigger | Planned maximum | Actual RPC/provider count | Cache hits / misses | Retry attempts / Retry-After | Poll intervals / attempts | Transaction hash | Receipt calls | Readback calls | Transaction count | Terminal phase | Variance / explanation |
-|---|---|---|---:|---:|---|---|---|---|---:|---:|---:|---|---|
-| `NOT YET MEASURED` | F0 | page load | 0 | `NOT YET MEASURED` | n/a | 0 | 0 | n/a | 0 | 0 | 0 | `NOT RUN` | Live release evidence required |
-| `NOT YET MEASURED` | F1–F3 | explicit list/detail/connect actions | row-specific | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | n/a | `NOT YET MEASURED` | `NOT YET MEASURED` | 0 | `NOT RUN` | Live release evidence required |
-| `NOT YET MEASURED` | F4–F6 | one unique write or reconciliation | row-specific | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | 5/10/20s or explicit reconciliation | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT RUN` | Live release evidence required |
-
-No row in this file is a release approval. The live gate must bind the completed evidence to the deployed source commit, final release URL, network, account context, transaction hashes, finalized receipts, and authoritative readbacks.
+This measured evidence is not itself release approval; final approval remains the `POST_GITHUB_VERCEL_FINAL` reviewer checkpoint.
