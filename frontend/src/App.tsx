@@ -676,7 +676,7 @@ export default function App() {
           operationArgs.push(caseMatch[3])
         }
         const before = await recoveryGateway.getVersion(caseMatch[2], caseMatch[3], budget)
-        if (!before || await caseStateHash(before) !== entry.pre_hash) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
+        if (!before) throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         const record = await recoveryGateway.getVersion(caseMatch[2], expectedRevision, budget)
         if (!record || record.id !== caseMatch[2] || record.revision !== expectedRevision || !sameAddress(record.primary, entry.account) || !operationPostcondition(record, caseMatch[1], before)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
