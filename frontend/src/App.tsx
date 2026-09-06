@@ -62,6 +62,8 @@ function friendlyError(error: unknown): string {
     if (error.message.includes('JOURNAL_ERROR:INVALID_JOURNAL_TRANSITION')) return 'The retained transaction is in an invalid recovery state. Keep its hash and export the journal before taking any further action.'
     if (error.message.includes('JOURNAL_ERROR:RESERVATION_NOT_FOUND')) return 'The retained transaction journal record is missing. Do not resubmit; preserve the transaction hash for recovery.'
     if (error.message.includes('JOURNAL_ERROR:IMMUTABLE_JOURNAL_CONTEXT')) return 'The retained transaction journal context changed. Do not resubmit; preserve the transaction hash for recovery.'
+    if (error.message.startsWith('JOURNAL_ERROR:')) return `Local transaction recovery stopped (${error.message.slice('JOURNAL_ERROR:'.length)}). Do not resubmit; preserve the transaction hash.`
+    if (/^[A-Z][A-Z0-9_:-]{2,96}$/.test(error.message)) return `Transaction verification stopped at ${error.message}. Do not resubmit; preserve the transaction hash.`
     if (error.message === 'BASE_SPEC_SHAPE' || error.message === 'BASE_SPEC_INVALID' || error.message === 'BAD_JSON' || error.message === 'Unexpected end of JSON input') return 'Enter a valid base specification JSON object.'
     if (error.message === 'DUPLICATE_KEY') return 'Duplicate JSON keys are not allowed.'
     if (error.message === 'BASE_SPEC_TOO_LARGE') return 'The base specification is too large for this contract.'

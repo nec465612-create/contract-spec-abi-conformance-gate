@@ -107,6 +107,7 @@ function safeErrorMessage(error: unknown): string {
   if (error instanceof RpcBudgetError) return error.message
   if (userRejected(error)) return 'The wallet request was cancelled.'
   if (error instanceof Error && /^(?:AUTHORITATIVE_READBACK_MISMATCH|FAILED_WRITE_PRESTATE_MISMATCH|FAILED_WRITE_POSTSTATE_MISMATCH)(?::[A-Z_]+)?$/.test(error.message)) return error.message
+  if (error instanceof Error && /^[A-Z][A-Z0-9_:-]{2,96}$/.test(error.message)) return error.message
   return 'The transaction could not be verified. It remains available for reconciliation.'
 }
 
