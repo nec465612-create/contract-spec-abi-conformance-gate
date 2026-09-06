@@ -124,7 +124,7 @@ function emitProgress(listener: ProgressListener | undefined, phase: Transaction
 }
 
 /**
- * Uses the current SDK's lightweight transaction read with a bounded 2/4/8-second
+ * Uses the current SDK's lightweight transaction read with a bounded 5/10/20-second
  * schedule. Transient RPC failures use the shared bounded retry policy; it
  * deliberately does not use an unbounded SDK poller.
  */

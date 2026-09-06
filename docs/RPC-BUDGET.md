@@ -221,6 +221,6 @@ Required for the exact final release and Vercel E2E gate. The current PRE_DEPLOY
 |---|---|---|---:|---:|---|---|---|---|---:|---:|---:|---|---|
 | `NOT YET MEASURED` | F0 | page load | 0 | `NOT YET MEASURED` | n/a | 0 | 0 | n/a | 0 | 0 | 0 | `NOT RUN` | Live release evidence required |
 | `NOT YET MEASURED` | F1–F3 | explicit list/detail/connect actions | row-specific | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | n/a | `NOT YET MEASURED` | `NOT YET MEASURED` | 0 | `NOT RUN` | Live release evidence required |
-| `NOT YET MEASURED` | F4–F6 | one unique write or reconciliation | row-specific | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | 2/4/8s or explicit reconciliation | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT RUN` | Live release evidence required |
+| `NOT YET MEASURED` | F4–F6 | one unique write or reconciliation | row-specific | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | 5/10/20s or explicit reconciliation | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT YET MEASURED` | `NOT RUN` | Live release evidence required |
 
 No row in this file is a release approval. The live gate must bind the completed evidence to the deployed source commit, final release URL, network, account context, transaction hashes, finalized receipts, and authoritative readbacks.
