@@ -59,3 +59,14 @@ The secret-free 30-event ledger is [vercel-e2e-rpc-evidence-20260907.json](evide
 ## Security and limitations
 
 No secret, private key, seed phrase, token, or wallet result is retained. Public addresses and hashes are included for reproducibility. The comparator checks canonical ABI signatures and submitted material, not deployed bytecode or external facts. Normalized V1 limits apply. There is no automatic history polling.
+
+## GenLayer submission category and scorecard
+
+Category: `PROJECT`. Validity gate: PASS for deployed source, live Studio proof, public repository, hosted frontend, and exact-release Vercel E2E; anonymous final approval remains pending.
+
+- GenLayer fit — **4/5**: consensus-backed ownership, revision history, immutable freezing, and canonical conformance result solve the shared-trust problem. The deterministic adaptation intentionally avoids subjective equivalence.
+- Contract quality — **4/5**: bounded data, strict normalization, optimistic revisions, immutable history, frozen locks, explicit errors, and positive/negative live proofs. It does not attest deployed bytecode.
+- Engineering — **4/5**: layered contract/frontend tests, generated ABI, fail-closed wallet/write lifecycle, one-shot submission, separate measured RPC ledgers, exact source/release binding, and reproducible public evidence. The bundle-size warning remains.
+- Frontend / UX — **4/5**: judge-facing create/read/freeze flow, correct EIP-6963 provider identity, explicit progress/failure states, persistent recovery journal, accessible controls, and measured Chrome E2E. History inspection is not exposed as a dedicated UI.
+
+Overall: a strong, complete PROJECT candidate. Submission remains `NOT READY` until exact-revision anonymous `POST_GITHUB_VERCEL_FINAL` approval.
