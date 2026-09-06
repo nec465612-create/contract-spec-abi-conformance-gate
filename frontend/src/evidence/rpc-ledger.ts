@@ -29,6 +29,7 @@ const STORAGE_KEY = 'genlayer-rpc-evidence-v1'
 let currentRow: EvidenceRow = 'F0'
 let nextAttempt = 1
 const providerWrappers = new WeakMap<Eip1193Provider, Eip1193Provider>()
+let rpcFetchInstalled = false
 
 function freshLedger(): RpcEvidenceLedger {
   return { schemaVersion: 1, runId: crypto.randomUUID(), releaseUrl: location.href, startedAt: new Date().toISOString(), events: [] }
@@ -121,6 +122,35 @@ export function exportRpcEvidence(): void {
   link.download = `genlayer-rpc-evidence-${ledger.runId}.json`
   link.click()
   URL.revokeObjectURL(url)
+}
+
+export function instrumentRpcFetch(fetchImpl: typeof fetch): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    let method: string | null = null
+    if (typeof init?.body === 'string') {
+      try {
+        const payload = JSON.parse(init.body) as { method?: unknown }
+        if (typeof payload.method === 'string') method = payload.method
+      } catch { /* non-RPC request */ }
+    }
+    if (!method) return fetchImpl(input, init)
+    const started = performance.now()
+    const startedAt = new Date().toISOString()
+    try {
+      const result = await fetchImpl(input, init)
+      observe({ channel: 'chain', method, status: result.ok ? 'SUCCESS' : 'ERROR', retryAfterMs: observedRetryAfterMs({ headers: result.headers }), cache: 'MISS', txHash: null, providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
+      return result
+    } catch (error) {
+      observe({ channel: 'chain', method, status: 'ERROR', retryAfterMs: observedRetryAfterMs(error), cache: 'MISS', txHash: null, providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
+      throw error
+    }
+  }) as typeof fetch
+}
+
+export function installRpcFetchInstrumentation(): void {
+  if (rpcFetchInstalled || typeof globalThis.fetch !== 'function') return
+  globalThis.fetch = instrumentRpcFetch(globalThis.fetch.bind(globalThis))
+  rpcFetchInstalled = true
 }
 
 export function instrumentClientRequest<T extends { request: (...args: never[]) => Promise<unknown> }>(client: T): T {

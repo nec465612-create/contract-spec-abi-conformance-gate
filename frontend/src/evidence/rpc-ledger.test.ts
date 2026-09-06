@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { beginRpcEvidence, instrumentClientRequest, instrumentProvider, withEvidenceRow } from './rpc-ledger'
+import { beginRpcEvidence, instrumentClientRequest, instrumentProvider, instrumentRpcFetch, withEvidenceRow } from './rpc-ledger'
 
 describe('RPC evidence ledger', () => {
   beforeEach(() => {
@@ -34,5 +34,21 @@ describe('RPC evidence ledger', () => {
     await expect(withEvidenceRow('F1', () => instrumentClientRequest(client).request({ method: 'gen_call' }))).rejects.toBeTruthy()
     const ledger = JSON.parse(localStorage.getItem('genlayer-rpc-evidence-v1') ?? '') as { events: Array<Record<string, unknown>> }
     expect(ledger.events[0]).toMatchObject({ row: 'F1', method: 'gen_call', status: 'ERROR', retryAfterMs: 2500 })
+  })
+
+  it('records GenLayerJS transport calls without retaining request parameters', async () => {
+    beginRpcEvidence()
+    const headers = new Headers()
+    const rawFetch = vi.fn(async () => new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x' }), { status: 200, headers }))
+    const measuredFetch = instrumentRpcFetch(rawFetch as typeof fetch)
+    await withEvidenceRow('F1', () => measuredFetch('https://rpc.example', {
+      method: 'POST',
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'gen_call', params: ['must-not-persist'] }),
+    }))
+
+    const stored = localStorage.getItem('genlayer-rpc-evidence-v1') ?? ''
+    const ledger = JSON.parse(stored) as { events: Array<Record<string, unknown>> }
+    expect(ledger.events).toMatchObject([{ row: 'F1', channel: 'chain', method: 'gen_call', status: 'SUCCESS' }])
+    expect(stored).not.toContain('must-not-persist')
   })
 })

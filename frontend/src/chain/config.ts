@@ -2,7 +2,7 @@ import { createClient } from 'genlayer-js'
 import { studionet } from 'genlayer-js/chains'
 import type { Address } from 'genlayer-js/types'
 import type { Eip1193Provider } from '../wallet/types'
-import { instrumentClientRequest } from '../evidence/rpc-ledger'
+import { installRpcFetchInstrumentation } from '../evidence/rpc-ledger'
 
 export type ContractAddress = `0x${string}`
 export type GenLayerClient = ReturnType<typeof createClient>
@@ -13,6 +13,8 @@ const configuredAddress = import.meta.env.VITE_CONTRACT_ADDRESS?.trim() ?? ''
 const configuredRpcUrl = import.meta.env.VITE_GENLAYER_RPC_URL?.trim() ?? ''
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/
 const RPC_URL_RE = /^https?:\/\/[^\s]+$/i
+
+installRpcFetchInstrumentation()
 
 export const contractAddress: ContractAddress | null = ADDRESS_RE.test(configuredAddress)
   ? (configuredAddress as ContractAddress)
@@ -58,11 +60,11 @@ export function getReadClient(account?: ContractAddress): GenLayerClient {
   const key = account?.toLowerCase() ?? ''
   const existing = readClients.get(key)
   if (existing) return existing
-  const client = instrumentClientRequest(createClient({
+  const client = createClient({
     chain: genlayerChain,
     ...(account ? { account: account as Address } : {}),
     ...clientEndpoint(),
-  }))
+  })
   readClients.set(key, client)
   return client
 }
@@ -71,12 +73,12 @@ export function getWriteClient(provider: Eip1193Provider, account: ContractAddre
   const key = account.toLowerCase()
   if (!writeClient || writeClientKey !== key || writeClientProvider !== provider) {
     const clientProvider = provider as unknown as CreateClientConfig['provider']
-    writeClient = instrumentClientRequest(createClient({
+    writeClient = createClient({
       chain: genlayerChain,
       account: account as Address,
       provider: clientProvider,
       ...clientEndpoint(),
-    }))
+    })
     writeClientKey = key
     writeClientProvider = provider
   }
