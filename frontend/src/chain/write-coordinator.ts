@@ -132,7 +132,7 @@ async function waitForFinality(hash: TransactionHash, signal?: AbortSignal): Pro
   const client = getReadClient()
   const budget = createRpcAttemptBudget(3)
   let last: GenLayerTransaction | undefined
-  for (const delay of [2_000, 4_000, 8_000]) {
+  for (const delay of [5_000, 10_000, 20_000]) {
     await waitForDocumentVisible(signal)
     await sleepWithSignal(delay, signal)
     await waitForDocumentVisible(signal)

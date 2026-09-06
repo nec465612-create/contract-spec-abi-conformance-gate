@@ -94,7 +94,7 @@ export function beginRpcEvidence(): void {
 
 export function exportRpcEvidence(): void {
   const ledger = load()
-  const maxima: Record<EvidenceRow, number> = { F0: 0, F1: 1, F2: 1, F3: 3, F4: 6, F5: 6, F6: 6, F7: 0 }
+  const maxima: Record<EvidenceRow, number> = { F0: 0, F1: 1, F2: 1, F3: 3, F4: 6, F5: 6, F6: 3, F7: 0 }
   const summary = (Object.keys(maxima) as EvidenceRow[]).map((row) => {
     const events = ledger.events.filter((event) => event.row === row)
     const transactionHashes = [...new Set(events.map((event) => event.txHash).filter((hash): hash is string => hash !== null))]
