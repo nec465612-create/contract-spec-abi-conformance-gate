@@ -64,7 +64,10 @@ function friendlyError(error: unknown): string {
     if (error.message === 'WRONG_NETWORK') return 'Connect the selected wallet to GenLayer Studionet before signing.'
     if (error.message === 'WALLET_ACCOUNT_CHANGED') return 'The selected wallet account changed. Reconnect it before signing.'
     if (error.message.includes('chain RPC is temporarily rate-limited')) return error.message
-    if (error.message.includes('AUTHORITATIVE_READBACK_MISMATCH')) return 'The transaction finalized, but the expected case state was not visible yet. Refresh and reconcile before retrying.'
+    if (error.message.includes('AUTHORITATIVE_READBACK_MISMATCH')) {
+      const reason = error.message.split(':')[1]
+      return reason ? `The transaction finalized, but authoritative reconciliation stopped at ${reason}. Refresh and reconcile before retrying.` : 'The transaction finalized, but the expected case state was not visible yet. Refresh and reconcile before retrying.'
+    }
     if (error.message.includes('FAILED_WRITE_POSTSTATE_MISMATCH')) return 'The failed transaction changed a historical revision unexpectedly. Keep the journal blocked and inspect the case.'
     if (error.message.includes('STALE_REVISION')) return 'This case changed on chain. Refresh it before submitting another action.'
     if (error.message.includes('BAD_PHASE')) return 'That action is not available in the case’s current phase.'
@@ -84,6 +87,10 @@ function pendingLabel(entry: JournalEntry): string {
   if (caseMatch) return `Case #${caseMatch[1]}`
   if (entry.intent.startsWith('create:')) return 'New case'
   return 'Contract action'
+}
+
+function authoritativeMismatch(reason: string): never {
+  throw new Error(`AUTHORITATIVE_READBACK_MISMATCH:${reason}`)
 }
 
 async function operationMatches(
@@ -598,21 +605,15 @@ export default function App() {
         recoveryGateway.invalidate()
         const createMatch = /^create:(0x[0-9a-f]{40}):([0-9a-f]{32})$/.exec(entry.intent)
         if (createMatch) {
-          if (entry.method !== 'create_case' || createMatch[1] !== entry.account) throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
+          if (entry.method !== 'create_case' || createMatch[1] !== entry.account) authoritativeMismatch('CREATE_INTENT')
           const args = JSON.parse(entry.args_json) as unknown
-          if (!Array.isArray(args) || args.length !== 3 || args[0] !== createMatch[2] || typeof args[1] !== 'string' || typeof args[2] !== 'string' || String(BigInt(args[2])) !== args[2]) {
-            throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
-          }
+          if (!Array.isArray(args) || args.length !== 3 || args[0] !== createMatch[2] || typeof args[1] !== 'string' || typeof args[2] !== 'string' || String(BigInt(args[2])) !== args[2]) authoritativeMismatch('CREATE_ARGS')
           const { parsed } = normalizeBaseJson(args[1])
           const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2], budget)
-          if (id === '0') throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
+          if (id === '0') authoritativeMismatch('CREATE_ID')
           const record = await recoveryGateway.getVersion(id, '1', budget)
-          if (!record || record.id !== id || record.revision !== '1' || record.primary.toLowerCase() !== entry.account || record.parent !== args[2]) {
-            throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
-          }
-          if (!(await operationMatches(record, 'create_case', entry.account, [createMatch[2], parsed, args[2]]))) {
-            throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
-          }
+          if (!record || record.id !== id || record.revision !== '1' || record.primary.toLowerCase() !== entry.account || record.parent !== args[2]) authoritativeMismatch('CREATE_RECORD')
+          if (!(await operationMatches(record, 'create_case', entry.account, [createMatch[2], parsed, args[2]]))) authoritativeMismatch('CREATE_OPERATION')
           return record
         }
         const caseMatch = /^(replace_base|freeze_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
