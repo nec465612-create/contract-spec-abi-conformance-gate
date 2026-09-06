@@ -583,8 +583,9 @@ export default function App() {
     setError(null)
     try {
       const provider = instrumentProvider(option.provider)
-      const [account] = await withEvidenceRow('F3', () => requestAccounts({ ...option, provider }))
-      await withEvidenceRow('F3', () => assertWalletContext(provider, account))
+      const evidenceRow = journalEntries.some((entry) => entry.status !== 'VERIFIED' && entry.status !== 'FINALIZED_ERROR') ? 'F6' : 'F3'
+      const [account] = await withEvidenceRow(evidenceRow, () => requestAccounts({ ...option, provider }))
+      await withEvidenceRow(evidenceRow, () => assertWalletContext(provider, account))
       setSession({ id: option.id, label: option.label, icon: option.icon, provider, account })
       setChooserOpen(false)
       setNotice(`${option.label} is connected for this tab.`)
