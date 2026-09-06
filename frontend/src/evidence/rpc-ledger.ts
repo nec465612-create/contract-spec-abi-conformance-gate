@@ -58,6 +58,26 @@ function hashFrom(value: unknown): string | null {
   return typeof value === 'string' && /^0x[0-9a-f]{64}$/i.test(value) ? value : null
 }
 
+export function observedRetryAfterMs(error: unknown): number | null {
+  const value = error && typeof error === 'object' ? error as {
+    retryAfter?: unknown
+    headers?: Headers | Record<string, unknown>
+    response?: { headers?: Headers | Record<string, unknown> }
+  } : {}
+  const readHeader = (headers: typeof value.headers): unknown => {
+    if (!headers) return undefined
+    if (typeof (headers as Headers).get === 'function') return (headers as Headers).get('Retry-After')
+    return (headers as Record<string, unknown>)['Retry-After'] ?? (headers as Record<string, unknown>)['retry-after']
+  }
+  const raw = value.retryAfter ?? readHeader(value.headers) ?? readHeader(value.response?.headers)
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return Math.ceil(raw * 1_000)
+  if (typeof raw !== 'string' || raw.trim() === '') return null
+  const trimmed = raw.trim()
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) return Math.ceil(Number(trimmed) * 1_000)
+  const timestamp = Date.parse(trimmed)
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : null
+}
+
 export async function withEvidenceRow<T>(row: EvidenceRow, action: () => Promise<T>): Promise<T> {
   const previous = currentRow
   currentRow = row
@@ -115,7 +135,7 @@ export function instrumentClientRequest<T extends { request: (...args: never[]) 
       observe({ channel: 'chain', method, status: 'SUCCESS', retryAfterMs: null, cache: 'MISS', txHash: hashFrom(result), providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
       return result
     } catch (error) {
-      observe({ channel: 'chain', method, status: 'ERROR', retryAfterMs: null, cache: 'MISS', txHash: null, providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
+      observe({ channel: 'chain', method, status: 'ERROR', retryAfterMs: observedRetryAfterMs(error), cache: 'MISS', txHash: null, providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
       throw error
     }
   }) as T['request']
@@ -136,7 +156,7 @@ export function instrumentProvider(provider: Eip1193Provider): Eip1193Provider {
         observe({ channel: 'provider', method: request.method, status: 'SUCCESS', retryAfterMs: null, cache: 'N/A', txHash: hashFrom(result), providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
         return result
       } catch (error) {
-        observe({ channel: 'provider', method: request.method, status: 'ERROR', retryAfterMs: null, cache: 'N/A', txHash: null, providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
+        observe({ channel: 'provider', method: request.method, status: 'ERROR', retryAfterMs: observedRetryAfterMs(error), cache: 'N/A', txHash: null, providerEvent: null, startedAt, durationMs: Math.round(performance.now() - started) })
         throw error
       }
     },

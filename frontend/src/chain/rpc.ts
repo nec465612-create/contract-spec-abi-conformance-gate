@@ -1,4 +1,4 @@
-import { setRpcEvidenceAttempt } from '../evidence/rpc-ledger'
+import { observedRetryAfterMs, setRpcEvidenceAttempt } from '../evidence/rpc-ledger'
 
 export const RPC_RETRY_POLICY = Object.freeze({
   maxAttempts: 3,
@@ -80,26 +80,6 @@ function numeric(value: unknown): number | null {
 function statusOf(error: unknown): number | null {
   const value = asShape(error)
   return numeric(value.status) ?? numeric(value.statusCode) ?? numeric(value.response?.status)
-}
-
-function headerValue(headers: HeaderSource | undefined, name: string): string | null {
-  if (!headers) return null
-  if (typeof headers.get === 'function') return headers.get(name) ?? headers.get(name.toLowerCase()) ?? null
-  const value = headers[name] ?? headers[name.toLowerCase()]
-  return typeof value === 'string' ? value : null
-}
-
-function retryAfterMs(error: unknown): number | null {
-  const value = asShape(error)
-  const raw = value.retryAfter
-    ?? headerValue(value.headers, 'Retry-After')
-    ?? headerValue(value.response?.headers, 'Retry-After')
-  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return Math.ceil(raw * 1_000)
-  if (typeof raw !== 'string' || raw.trim() === '') return null
-  const trimmed = raw.trim()
-  if (/^\d+(?:\.\d+)?$/.test(trimmed)) return Math.ceil(Number(trimmed) * 1_000)
-  const timestamp = Date.parse(trimmed)
-  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : null
 }
 
 export function isTransientRpcError(error: unknown): boolean {
@@ -221,7 +201,7 @@ export async function withRpcRetry<T>(operation: () => Promise<T>, options: RpcR
         if (isTransientRpcError(error)) throw new RpcBudgetError(true)
         throw error
       }
-      const serverDelay = retryAfterMs(error)
+      const serverDelay = observedRetryAfterMs(error)
       if (serverDelay !== null && serverDelay > maxDelayMs) throw new RpcBudgetError(true)
       const exponential = Math.min(maxDelayMs, baseDelayMs * (2 ** attempt))
       const jitter = serverDelay === null

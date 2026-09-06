@@ -25,4 +25,14 @@ describe('RPC evidence ledger', () => {
     expect(stored).not.toContain('must-not-persist')
     expect(stored).not.toContain('0xsecret')
   })
+
+  it('records an exact Retry-After value on an error event', async () => {
+    beginRpcEvidence()
+    const client: { request(request: { method: string }): Promise<unknown> } = {
+      request: vi.fn(async () => { throw { response: { headers: { 'Retry-After': '2.5' } } } }),
+    }
+    await expect(withEvidenceRow('F1', () => instrumentClientRequest(client).request({ method: 'gen_call' }))).rejects.toBeTruthy()
+    const ledger = JSON.parse(localStorage.getItem('genlayer-rpc-evidence-v1') ?? '') as { events: Array<Record<string, unknown>> }
+    expect(ledger.events[0]).toMatchObject({ row: 'F1', method: 'gen_call', status: 'ERROR', retryAfterMs: 2500 })
+  })
 })
