@@ -1,5 +1,7 @@
-import { deterministicEvaluation, normalizeBaseJson, parseJsonStrict, ReadCache } from './contract'
+import { ContractGateway, deterministicEvaluation, normalizeBaseJson, parseJsonStrict, ReadCache, type CasePage } from './contract'
+import type { GenLayerClient } from './config'
 import { stableStringify } from '../lib/encoding'
+import { vi } from 'vitest'
 
 describe('contract read boundary', () => {
   it('canonicalizes base JSON without executing or trusting presentation order', () => {
@@ -57,6 +59,33 @@ describe('contract read boundary', () => {
     resolveStale?.('stale')
     await stale
     await expect(cache.get('same', async () => 'unexpected')).resolves.toBe('fresh')
+  })
+
+  it('partitions gateway caches by read client while deduplicating within one client', async () => {
+    const address = '0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D' as `0x${string}`
+    const page = (id: string): CasePage => ({ ids: [id], next: '0' })
+    const firstClient = {
+      chain: { id: 61999 },
+      readContract: vi.fn(async () => page('first')),
+    } as unknown as GenLayerClient
+    const secondClient = {
+      chain: { id: 61999 },
+      readContract: vi.fn(async () => page('second')),
+    } as unknown as GenLayerClient
+    const firstGateway = new ContractGateway(address, firstClient)
+    const secondGateway = new ContractGateway(address, secondClient)
+
+    const [first, duplicate, second] = await Promise.all([
+      firstGateway.listCases(),
+      firstGateway.listCases(),
+      secondGateway.listCases(),
+    ])
+
+    expect(first).toEqual(page('first'))
+    expect(duplicate).toEqual(page('first'))
+    expect(second).toEqual(page('second'))
+    expect(firstClient.readContract).toHaveBeenCalledTimes(1)
+    expect(secondClient.readContract).toHaveBeenCalledTimes(1)
   })
 
   it('keeps argument serialization deterministic at the boundary', () => {

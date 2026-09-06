@@ -412,14 +412,19 @@ export function normalizeBaseJson(raw: string): { canonical: string; parsed: Bas
   return { canonical, parsed: parsed as BaseSpec, metrics: { ...metrics, bytes } }
 }
 
-const sharedCaches = new Map<string, ReadCache>()
+const sharedCaches = new WeakMap<object, Map<string, ReadCache>>()
 
-function sharedCacheFor(chainId: number, address: ContractAddress): ReadCache {
-  const key = `${chainId}:${address.toLowerCase()}`
-  const existing = sharedCaches.get(key)
+function sharedCacheFor(client: GenLayerClient, address: ContractAddress): ReadCache {
+  let clientCaches = sharedCaches.get(client)
+  if (!clientCaches) {
+    clientCaches = new Map<string, ReadCache>()
+    sharedCaches.set(client, clientCaches)
+  }
+  const key = `${client.chain.id}:${address.toLowerCase()}`
+  const existing = clientCaches.get(key)
   if (existing) return existing
   const cache = new ReadCache()
-  sharedCaches.set(key, cache)
+  clientCaches.set(key, cache)
   return cache
 }
 
@@ -430,7 +435,7 @@ export class ContractGateway {
     private readonly address: ContractAddress,
     private readonly readClient: GenLayerClient = getReadClient(),
   ) {
-    this.cache = sharedCacheFor(this.readClient.chain.id, address)
+    this.cache = sharedCacheFor(this.readClient, address)
   }
 
   private async read(functionName: string, args: CalldataEncodable[], budget?: RpcAttemptBudget): Promise<unknown> {
