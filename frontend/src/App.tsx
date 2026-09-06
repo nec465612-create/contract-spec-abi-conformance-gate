@@ -101,6 +101,15 @@ function authoritativeMismatch(reason: string): never {
   throw new Error(`AUTHORITATIVE_READBACK_MISMATCH:${reason}`)
 }
 
+async function readbackStep<T>(label: string, task: () => Promise<T>): Promise<T> {
+  try {
+    return await task()
+  } catch (error) {
+    if (error instanceof RpcBudgetError || error instanceof JournalError) throw error
+    throw new Error(`READBACK_${label}`)
+  }
+}
+
 async function operationMatches(
   record: CaseRecord,
   method: string,
@@ -617,11 +626,11 @@ export default function App() {
           const args = JSON.parse(entry.args_json) as unknown
           if (!Array.isArray(args) || args.length !== 3 || args[0] !== createMatch[2] || typeof args[1] !== 'string' || typeof args[2] !== 'string' || String(BigInt(args[2])) !== args[2]) authoritativeMismatch('CREATE_ARGS')
           const { parsed } = normalizeBaseJson(args[1])
-          const id = await recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2], budget)
+          const id = await readbackStep('CREATE_ID', () => recoveryGateway.getIdByNonce(entry.account as ContractAddress, createMatch[2], budget))
           if (id === '0') authoritativeMismatch('CREATE_ID')
-          const record = await recoveryGateway.getVersion(id, '1', budget)
+          const record = await readbackStep('CREATE_RECORD', () => recoveryGateway.getVersion(id, '1', budget))
           if (!record || record.id !== id || record.revision !== '1' || record.primary.toLowerCase() !== entry.account || record.parent !== args[2]) authoritativeMismatch('CREATE_RECORD')
-          if (!(await operationMatches(record, 'create_case', entry.account, [createMatch[2], parsed, args[2]]))) authoritativeMismatch('CREATE_OPERATION')
+          if (!(await readbackStep('CREATE_OPERATION', () => operationMatches(record, 'create_case', entry.account, [createMatch[2], parsed, args[2]])))) authoritativeMismatch('CREATE_OPERATION')
           return record
         }
         const caseMatch = /^(replace_base|freeze_case):([1-9][0-9]*):([0-9]+)$/.exec(entry.intent)
