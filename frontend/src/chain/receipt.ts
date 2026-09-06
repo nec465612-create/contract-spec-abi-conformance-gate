@@ -20,6 +20,9 @@ function decodeStatus(value: unknown): TransactionStatus | null {
 function decodeExecution(value: unknown): ExecutionResult | null {
   if (typeof value === 'string' && EXECUTION_BY_NUMBER.includes(value as ExecutionResult)) return value as ExecutionResult
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < EXECUTION_BY_NUMBER.length) return EXECUTION_BY_NUMBER[value] as ExecutionResult
+  const normalized = typeof value === 'string' ? value.toUpperCase() : String(value)
+  if (normalized === 'SUCCESS' || normalized === 'FINISHED_WITH_RETURN' || normalized === '1') return ExecutionResult.FINISHED_WITH_RETURN
+  if (normalized === 'ERROR' || normalized === 'USER_ERROR' || normalized === 'FINISHED_WITH_ERROR' || normalized === '2') return ExecutionResult.FINISHED_WITH_ERROR
   return null
 }
 
@@ -33,6 +36,27 @@ function consistentFields<T>(values: unknown[], decode: (value: unknown) => T | 
     : { value: first, contradictory: false }
 }
 
+function isQuorumCancellation(receipt: unknown): boolean {
+  if (!receipt || typeof receipt !== 'object') return false
+  const value = receipt as { vote?: unknown; genvm_result?: { error_code?: unknown } }
+  return String(value.vote ?? '').toLowerCase() === 'idle'
+    && value.genvm_result?.error_code === 'CONSENSUS_VALIDATOR_QUORUM_REACHED'
+}
+
+function executionResultValues(transaction: GenLayerTransaction): unknown[] {
+  const consensus = transaction.consensus_data
+  return [
+    transaction.txExecutionResultName,
+    transaction.txExecutionResult,
+    ...(consensus?.leader_receipt ?? [])
+      .filter((receipt) => !isQuorumCancellation(receipt))
+      .map((receipt) => receipt.execution_result),
+    ...(consensus?.validators ?? [])
+      .filter((receipt) => !isQuorumCancellation(receipt))
+      .map((receipt) => receipt.execution_result),
+  ].filter((value) => value !== undefined && value !== null)
+}
+
 export function receiptStatus(receipt: GenLayerTransaction): DecodedField<TransactionStatus> {
   return consistentFields(
     [receipt.statusName, receipt.status].filter((value) => value !== undefined),
@@ -42,7 +66,7 @@ export function receiptStatus(receipt: GenLayerTransaction): DecodedField<Transa
 
 export function receiptExecution(receipt: GenLayerTransaction): DecodedField<ExecutionResult> {
   return consistentFields(
-    [receipt.txExecutionResultName, receipt.txExecutionResult].filter((value) => value !== undefined),
+    executionResultValues(receipt),
     decodeExecution,
   )
 }

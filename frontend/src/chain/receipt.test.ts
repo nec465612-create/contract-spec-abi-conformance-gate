@@ -1,4 +1,4 @@
-import { ExecutionResult, TransactionStatus } from 'genlayer-js/types'
+import { ExecutionResult, TransactionStatus, type GenLayerTransaction } from 'genlayer-js/types'
 import { classifyReceipt, isTransactionHash } from './receipt'
 
 describe('transaction truth checks', () => {
@@ -15,6 +15,20 @@ describe('transaction truth checks', () => {
   it('rejects contradictory status and execution representations', () => {
     expect(classifyReceipt({ statusName: TransactionStatus.FINALIZED, status: TransactionStatus.PROPOSING, txExecutionResultName: ExecutionResult.FINISHED_WITH_RETURN })).toMatchObject({ ok: false, kind: 'inconsistent' })
     expect(classifyReceipt({ statusName: TransactionStatus.FINALIZED, status: 7, txExecutionResultName: ExecutionResult.FINISHED_WITH_RETURN, txExecutionResult: 2 })).toMatchObject({ ok: false, kind: 'inconsistent' })
+  })
+
+  it('classifies the current Studio consensus receipt shape', () => {
+    expect(classifyReceipt({
+      statusName: TransactionStatus.FINALIZED,
+      consensus_data: {
+        final: true,
+        leader_receipt: [{ execution_result: 'SUCCESS', vote: 'agree' }],
+        validators: [
+          { execution_result: 'SUCCESS', vote: 'agree' },
+          { execution_result: 'ERROR', vote: 'idle', genvm_result: { error_code: 'CONSENSUS_VALIDATOR_QUORUM_REACHED' } },
+        ],
+      },
+    } as unknown as GenLayerTransaction)).toMatchObject({ ok: true })
   })
 
   it('accepts only a 32-byte transaction hash', () => {
