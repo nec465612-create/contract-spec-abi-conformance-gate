@@ -9,7 +9,7 @@ import {
 import { assertWalletContext, contractAddress, genlayerChain, getReadClient, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
 import { executeContractWrite, reconcileJournalEntry, writeIntent, type WriteProgress } from './chain/write-coordinator'
 import { beginRpcEvidence, exportRpcEvidence, instrumentProvider, withEvidenceRow } from './evidence/rpc-ledger'
-import { createRpcAttemptBudget, RpcBudgetError, type RpcAttemptBudget } from './chain/rpc'
+import { createRpcAttemptBudget, RpcBudgetError, sleepWithSignal, type RpcAttemptBudget } from './chain/rpc'
 import { JournalError, JournalStore, type JournalEntry } from './persistence/journal'
 import { isRecord, jsonSafe, sha256Hex, stableStringify } from './lib/encoding'
 import { requestAccounts, useWalletProviders } from './wallet/providers'
@@ -18,6 +18,10 @@ import { TransactionProgress } from './components/TransactionProgress'
 import './styles.css'
 
 type RequirementDraft = { id: string; text: string; polarity: 'REQUIRED' | 'FORBIDDEN'; signature: string }
+
+export function sameAddress(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase()
+}
 
 const DEFAULT_REQUIREMENTS: RequirementDraft[] = [
   { id: 'transfer', text: 'The contract exposes this exact transfer function.', polarity: 'REQUIRED', signature: 'transfer(address,uint256)->():nonpayable' },
@@ -674,7 +678,7 @@ export default function App() {
         const before = await recoveryGateway.getVersion(caseMatch[2], caseMatch[3], budget)
         if (!before || await caseStateHash(before) !== entry.pre_hash) throw new Error('FAILED_WRITE_PRESTATE_MISMATCH')
         const record = await recoveryGateway.getVersion(caseMatch[2], expectedRevision, budget)
-        if (!record || record.id !== caseMatch[2] || record.revision !== expectedRevision || record.primary.toLowerCase() !== entry.account || !operationPostcondition(record, caseMatch[1], before)) {
+        if (!record || record.id !== caseMatch[2] || record.revision !== expectedRevision || !sameAddress(record.primary, entry.account) || !operationPostcondition(record, caseMatch[1], before)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
         if (!(await operationMatches(record, caseMatch[1], entry.account, operationArgs))) {
@@ -825,8 +829,13 @@ export default function App() {
       preHash,
       readback: async (budget) => {
         gateway.invalidate()
-        const updated = await gateway.getVersion(selectedCase.id, nextRevision, budget)
-        if (!updated || updated.revision !== nextRevision || updated.primary.toLowerCase() !== session.account.toLowerCase() || !operationPostcondition(updated, method, selectedCase)) {
+        let updated = await gateway.getVersion(selectedCase.id, nextRevision, budget)
+        if (!updated || updated.revision !== nextRevision || !sameAddress(updated.primary, session.account) || !operationPostcondition(updated, method, selectedCase)) {
+          await sleepWithSignal(4_000)
+          gateway.invalidate()
+          updated = await gateway.getVersion(selectedCase.id, nextRevision, budget)
+        }
+        if (!updated || updated.revision !== nextRevision || !sameAddress(updated.primary, session.account) || !operationPostcondition(updated, method, selectedCase)) {
           throw new Error('AUTHORITATIVE_READBACK_MISMATCH')
         }
         if (!(await operationMatches(updated, method, session.account, operationArgs))) {

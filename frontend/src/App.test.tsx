@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { WalletChooser } from './App'
+import { sameAddress, WalletChooser } from './App'
 import type { WalletOption } from './wallet/types'
 
 describe('wallet chooser', () => {
@@ -20,5 +20,11 @@ describe('wallet chooser', () => {
     screen.getByRole('button', { name: /MetaMask/ }).click()
     expect(onChoose).toHaveBeenCalledWith(option)
     expect(request).not.toHaveBeenCalled()
+  })
+})
+
+describe('transaction recovery identity', () => {
+  it('matches checksum and normalized forms of the same wallet address', () => {
+    expect(sameAddress('0xe8D6C55838C39301c11D54fC9A38B9de298329F6', '0xe8d6c55838c39301c11d54fc9a38b9de298329f6')).toBe(true)
   })
 })
