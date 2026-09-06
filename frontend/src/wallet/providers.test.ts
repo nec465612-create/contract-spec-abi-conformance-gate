@@ -51,8 +51,28 @@ describe('wallet discovery', () => {
     fireEvent(window, new CustomEvent('eip6963:announceProvider', {
       detail: { info: { uuid: 'rabby-1', name: 'Rabby', icon: 'data:image/svg+xml,rabby', rdns: 'io.rabby' }, provider: rabby },
     }))
+    expect(registry.snapshot().map((item) => item.id)).toEqual(['okx', 'rabby'])
+    fireEvent(window, new CustomEvent('eip6963:announceProvider', {
+      detail: { info: { uuid: 'metamask-1', name: 'MetaMask', icon: 'data:image/svg+xml,metamask', rdns: 'io.metamask' }, provider: first },
+    }))
     expect(registry.snapshot().map((item) => item.id)).toEqual(['metamask', 'okx', 'rabby'])
     expect(registry.snapshot().some((item) => item.label.toLowerCase().includes('injected'))).toBe(false)
+  })
+
+  it('drops a compatibility-only MetaMask tile when OKX announces authoritatively', () => {
+    const host = window as Window & { ethereum?: Eip1193Provider }
+    host.ethereum = provider({ isMetaMask: true })
+    const registry = new ProviderRegistry(host)
+    registries.push(registry)
+    registry.start()
+    expect(registry.snapshot().map((item) => item.id)).toEqual(['metamask'])
+
+    fireEvent(window, new CustomEvent('eip6963:announceProvider', {
+      detail: { info: { uuid: 'okx-authoritative', name: 'OKX Wallet', icon: 'data:image/svg+xml,okx', rdns: 'com.okx.wallet' }, provider: provider() },
+    }))
+
+    expect(registry.snapshot().map((item) => item.id)).toEqual(['okx'])
+    expect(registry.snapshot()[0].icon).toBe('data:image/svg+xml,okx')
   })
 
   it('deduplicates announcements and replaces only the matching legacy tile', () => {

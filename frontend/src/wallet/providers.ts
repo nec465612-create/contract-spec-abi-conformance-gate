@@ -64,6 +64,10 @@ export class ProviderRegistry {
       if (!detail?.info || !isProvider(detail.provider)) return
       const walletId = walletIdFromEip6963(detail.info)
       if (!walletId || typeof detail.info.uuid !== 'string') return
+      // Legacy flags are compatibility signals only. Once any supported
+      // provider announces through EIP-6963, they must not keep a stale or
+      // misidentified tile (for example OKX exposing isMetaMask).
+      this.options = this.options.filter((item) => item.source !== 'legacy')
       this.upsert({
         id: walletId,
         label: WALLET_CATALOG[walletId].label,
