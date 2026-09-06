@@ -625,7 +625,11 @@ export default function App() {
       setError('This pending action belongs to another network context and is read-only here.')
       return
     }
-    const recoveryGateway = new ContractGateway(entry.contract, getReadClient(entry.account as ContractAddress), entry.account as ContractAddress)
+    if (!contractAddress || contractAddress.toLowerCase() !== entry.contract.toLowerCase()) {
+      setError('This pending action belongs to another contract context and remains read-only here.')
+      return
+    }
+    const recoveryGateway = new ContractGateway(contractAddress, getReadClient(entry.account as ContractAddress), entry.account as ContractAddress)
     const reconcileKey = `reconcile:${entry.reservation}`
     const controller = new AbortController()
     writeAbortRef.current = controller
