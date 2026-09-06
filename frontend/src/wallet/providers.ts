@@ -84,8 +84,11 @@ export class ProviderRegistry {
     this.started = true
     // Register the page-lifetime listener before requesting announcements.
     this.host.addEventListener(ANNOUNCE_EVENT, this.announceListener)
-    this.host.dispatchEvent(new CustomEvent(REQUEST_EVENT))
     this.scanLegacy()
+    // Scan legacy providers first. Some injected wallets announce EIP-6963
+    // synchronously; letting that announcement reconcile the compatibility
+    // tile prevents an OKX provider's isMetaMask flag from leaking into the chooser.
+    this.host.dispatchEvent(new CustomEvent(REQUEST_EVENT))
   }
 
   stop(): void {

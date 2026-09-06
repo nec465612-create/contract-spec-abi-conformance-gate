@@ -75,6 +75,20 @@ describe('wallet discovery', () => {
     expect(registry.snapshot()[0].icon).toBe('data:image/svg+xml,okx')
   })
 
+  it('does not keep a legacy MetaMask tile when OKX answers the initial request synchronously', () => {
+    const host = new EventTarget() as EventTarget & { ethereum?: Eip1193Provider }
+    host.ethereum = provider({ isMetaMask: true })
+    host.addEventListener('eip6963:requestProvider', () => {
+      host.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
+        detail: { info: { uuid: 'okx-sync', name: 'OKX Wallet', icon: 'data:image/svg+xml,okx', rdns: 'com.okx.wallet' }, provider: provider() },
+      }))
+    })
+    const registry = new ProviderRegistry(host)
+    registries.push(registry)
+    registry.start()
+    expect(registry.snapshot().map((item) => item.id)).toEqual(['okx'])
+  })
+
   it('deduplicates announcements and replaces only the matching legacy tile', () => {
     const legacy = provider({ isMetaMask: true })
     const host = window as Window & { ethereum?: Eip1193Provider }
