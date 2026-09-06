@@ -101,12 +101,26 @@ function authoritativeMismatch(reason: string): never {
   throw new Error(`AUTHORITATIVE_READBACK_MISMATCH:${reason}`)
 }
 
+function readbackFailureCode(label: string, error: unknown): string {
+  const value = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : {}
+  const code = String(value.code ?? '')
+  if (/^-?\d+$/.test(code)) return `READBACK_${label}_RPC_${code.replace('-', 'N')}`
+  if (/^[A-Z][A-Z0-9_]{2,64}$/.test(code)) return `READBACK_${label}_${code}`
+  const message = String(value.message ?? error ?? '').toLowerCase()
+  if (/timeout|timed out|aborted/.test(message)) return `READBACK_${label}_RPC_TIMEOUT`
+  if (/fetch|network|connection|transport/.test(message)) return `READBACK_${label}_RPC_TRANSPORT`
+  if (/invalid params|invalid argument|method not found|does not match/.test(message)) return `READBACK_${label}_RPC_INVALID_PARAMS`
+  if (/decode|abi|calldata|serialize|deserialize/.test(message)) return `READBACK_${label}_RPC_DECODE`
+  if (/execution reverted|contract function|execution error|rpc error|json-rpc/.test(message)) return `READBACK_${label}_RPC_RESPONSE`
+  return `READBACK_${label}_ERROR`
+}
+
 async function readbackStep<T>(label: string, task: () => Promise<T>): Promise<T> {
   try {
     return await task()
   } catch (error) {
     if (error instanceof RpcBudgetError || error instanceof JournalError) throw error
-    throw new Error(`READBACK_${label}`)
+    throw new Error(readbackFailureCode(label, error))
   }
 }
 
