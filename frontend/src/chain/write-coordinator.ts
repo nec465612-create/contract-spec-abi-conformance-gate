@@ -102,7 +102,7 @@ function userRejected(error: unknown): boolean {
 }
 
 function safeErrorMessage(error: unknown): string {
-  if (error instanceof JournalError) return error.message
+  if (error instanceof JournalError) return `JOURNAL_ERROR:${error.code}`
   if (error instanceof WriteCoordinatorError) return error.message
   if (error instanceof RpcBudgetError) return error.message
   if (userRejected(error)) return 'The wallet request was cancelled.'

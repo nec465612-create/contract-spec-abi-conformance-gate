@@ -58,6 +58,10 @@ function friendlyError(error: unknown): string {
   }
   if (error instanceof Error) {
     if (error instanceof RpcBudgetError) return error.message
+    if (error.message.includes('JOURNAL_ERROR:JOURNAL_LOCK_UNAVAILABLE')) return 'Local transaction recovery is unavailable because the exclusive browser lock could not be acquired. No action was submitted.'
+    if (error.message.includes('JOURNAL_ERROR:INVALID_JOURNAL_TRANSITION')) return 'The retained transaction is in an invalid recovery state. Keep its hash and export the journal before taking any further action.'
+    if (error.message.includes('JOURNAL_ERROR:RESERVATION_NOT_FOUND')) return 'The retained transaction journal record is missing. Do not resubmit; preserve the transaction hash for recovery.'
+    if (error.message.includes('JOURNAL_ERROR:IMMUTABLE_JOURNAL_CONTEXT')) return 'The retained transaction journal context changed. Do not resubmit; preserve the transaction hash for recovery.'
     if (error.message === 'BASE_SPEC_SHAPE' || error.message === 'BASE_SPEC_INVALID' || error.message === 'BAD_JSON' || error.message === 'Unexpected end of JSON input') return 'Enter a valid base specification JSON object.'
     if (error.message === 'DUPLICATE_KEY') return 'Duplicate JSON keys are not allowed.'
     if (error.message === 'BASE_SPEC_TOO_LARGE') return 'The base specification is too large for this contract.'
