@@ -26,6 +26,7 @@ interface RpcEvidenceLedger {
 }
 
 const STORAGE_KEY = 'genlayer-rpc-evidence-v1'
+export const RPC_ROW_MAXIMA: Record<EvidenceRow, number> = { F0: 0, F1: 1, F2: 1, F3: 3, F4: 11, F5: 11, F6: 3, F7: 0 }
 let currentRow: EvidenceRow = 'F0'
 let nextAttempt = 1
 const providerWrappers = new WeakMap<Eip1193Provider, Eip1193Provider>()
@@ -95,7 +96,7 @@ export function beginRpcEvidence(): void {
 
 export function exportRpcEvidence(): void {
   const ledger = load()
-  const maxima: Record<EvidenceRow, number> = { F0: 0, F1: 1, F2: 1, F3: 3, F4: 6, F5: 6, F6: 3, F7: 0 }
+  const maxima = RPC_ROW_MAXIMA
   const summary = (Object.keys(maxima) as EvidenceRow[]).map((row) => {
     const events = ledger.events.filter((event) => event.row === row)
     const transactionHashes = [...new Set(events.map((event) => event.txHash).filter((hash): hash is string => hash !== null))]

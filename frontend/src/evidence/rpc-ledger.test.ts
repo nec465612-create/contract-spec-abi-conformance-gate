@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { beginRpcEvidence, instrumentClientRequest, instrumentProvider, instrumentRpcFetch, withEvidenceRow } from './rpc-ledger'
+import { beginRpcEvidence, instrumentClientRequest, instrumentProvider, instrumentRpcFetch, RPC_ROW_MAXIMA, withEvidenceRow } from './rpc-ledger'
 
 describe('RPC evidence ledger', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.stubGlobal('crypto', { randomUUID: () => 'run-1' })
+  })
+
+  it('includes SDK preparation, wallet context, submission, finality, and readbacks in each write cap', () => {
+    expect(RPC_ROW_MAXIMA.F4).toBe(11)
+    expect(RPC_ROW_MAXIMA.F5).toBe(11)
   })
 
   it('records requests but never their parameters or account results', async () => {
