@@ -2,6 +2,7 @@ import { createClient } from 'genlayer-js'
 import { studionet } from 'genlayer-js/chains'
 import type { Address } from 'genlayer-js/types'
 import type { Eip1193Provider } from '../wallet/types'
+import { instrumentClientRequest } from '../evidence/rpc-ledger'
 
 export type ContractAddress = `0x${string}`
 export type GenLayerClient = ReturnType<typeof createClient>
@@ -57,11 +58,11 @@ export function getReadClient(account?: ContractAddress): GenLayerClient {
   const key = account?.toLowerCase() ?? ''
   const existing = readClients.get(key)
   if (existing) return existing
-  const client = createClient({
+  const client = instrumentClientRequest(createClient({
     chain: genlayerChain,
     ...(account ? { account: account as Address } : {}),
     ...clientEndpoint(),
-  })
+  }))
   readClients.set(key, client)
   return client
 }
@@ -70,12 +71,12 @@ export function getWriteClient(provider: Eip1193Provider, account: ContractAddre
   const key = account.toLowerCase()
   if (!writeClient || writeClientKey !== key || writeClientProvider !== provider) {
     const clientProvider = provider as unknown as CreateClientConfig['provider']
-    writeClient = createClient({
+    writeClient = instrumentClientRequest(createClient({
       chain: genlayerChain,
       account: account as Address,
       provider: clientProvider,
       ...clientEndpoint(),
-    })
+    }))
     writeClientKey = key
     writeClientProvider = provider
   }

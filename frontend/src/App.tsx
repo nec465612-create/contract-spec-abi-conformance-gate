@@ -8,6 +8,7 @@ import {
 } from './chain/contract'
 import { assertWalletContext, contractAddress, genlayerChain, getReadClient, runtimeConfigurationMessage, type ContractAddress } from './chain/config'
 import { executeContractWrite, reconcileJournalEntry, writeIntent, type WriteProgress } from './chain/write-coordinator'
+import { beginRpcEvidence, exportRpcEvidence, instrumentProvider, withEvidenceRow } from './evidence/rpc-ledger'
 import { createRpcAttemptBudget, RpcBudgetError, type RpcAttemptBudget } from './chain/rpc'
 import { JournalError, JournalStore, type JournalEntry } from './persistence/journal'
 import { isRecord, jsonSafe, sha256Hex, stableStringify } from './lib/encoding'
@@ -545,7 +546,7 @@ export default function App() {
     setError(null)
     try {
       gateway.invalidate()
-      const page = await gateway.listCases('1', '4', createRpcAttemptBudget(1))
+      const page = await withEvidenceRow('F1', () => gateway.listCases('1', '4', createRpcAttemptBudget(1)))
       setCaseCount(String(page.ids.length))
       setCaseIds(page.ids)
     } catch (loadError) {
@@ -562,7 +563,7 @@ export default function App() {
     setError(null)
     try {
       gateway.invalidate()
-      const record = await gateway.getCase(id, createRpcAttemptBudget(1))
+      const record = await withEvidenceRow('F2', () => gateway.getCase(id, createRpcAttemptBudget(1)))
       setSelectedCase(record)
       if (record) setReplaceJson(JSON.stringify(record.base, null, 2))
     } catch (loadError) {
@@ -581,9 +582,10 @@ export default function App() {
     setChooserBusy(option.id)
     setError(null)
     try {
-      const [account] = await requestAccounts(option)
-      await assertWalletContext(option.provider, account)
-      setSession({ id: option.id, label: option.label, icon: option.icon, provider: option.provider, account })
+      const provider = instrumentProvider(option.provider)
+      const [account] = await withEvidenceRow('F3', () => requestAccounts({ ...option, provider }))
+      await withEvidenceRow('F3', () => assertWalletContext(provider, account))
+      setSession({ id: option.id, label: option.label, icon: option.icon, provider, account })
       setChooserOpen(false)
       setNotice(`${option.label} is connected for this tab.`)
     } catch (connectError) {
@@ -593,15 +595,15 @@ export default function App() {
     }
   }
 
-  const runWrite = async <T,>(request: Parameters<typeof executeContractWrite<T>>[1], successMessage: string) => {
+  const runWrite = async <T,>(row: 'F4' | 'F5', request: Parameters<typeof executeContractWrite<T>>[1], successMessage: string) => {
     setBusyAction(request.method)
     setError(null)
     setNotice(null)
     const controller = new AbortController()
     writeAbortRef.current = controller
     try {
-      await assertWalletContext(request.provider, request.account)
-      const completed = await executeContractWrite(journal, { ...request, signal: controller.signal, onProgress: setWriteProgress })
+      await withEvidenceRow(row, () => assertWalletContext(request.provider, request.account))
+      const completed = await withEvidenceRow(row, () => executeContractWrite(journal, { ...request, signal: controller.signal, onProgress: setWriteProgress }))
       refreshJournal()
       gateway?.invalidate()
       if (isRecord(completed.readback) && completed.readback.v === 1 && typeof completed.readback.id === 'string' && typeof completed.readback.revision === 'string') {
@@ -636,7 +638,7 @@ export default function App() {
     setBusyAction(reconcileKey)
     setError(null)
     try {
-      const reconciled = await reconcileJournalEntry(journal, entry, async (budget) => {
+      const reconciled = await withEvidenceRow('F6', () => reconcileJournalEntry(journal, entry, async (budget) => {
         recoveryGateway.invalidate()
         const createMatch = /^create:(0x[0-9a-f]{40}):([0-9a-f]{32})$/.exec(entry.intent)
         if (createMatch) {
@@ -703,7 +705,7 @@ export default function App() {
           operationArgs.push(caseMatch[3])
         }
         await verifyFailedCaseMutation(recoveryGateway, caseMatch[2], entry.pre_revision, entry.pre_hash, caseMatch[1], entry.account, operationArgs, budget)
-      }, setWriteProgress, controller.signal)
+      }, setWriteProgress, controller.signal))
       recoveryGateway.invalidate()
       gateway?.invalidate()
       refreshJournal()
@@ -745,6 +747,11 @@ export default function App() {
     }
   }
 
+  const startRpcCapture = () => {
+    beginRpcEvidence()
+    location.reload()
+  }
+
   const createCase = async (nonce: string, baseJson: string, parent: string) => {
     if (!session || !gateway || !contractAddress) return
     setError(null)
@@ -754,7 +761,7 @@ export default function App() {
       const { canonical, parsed } = normalizeBaseJson(baseJson)
       const parentId = BigInt(parent)
       const preHash = await sha256Hex(stableStringify([nonce, parsed, parentId.toString()]))
-      await runWrite({
+      await runWrite('F4', {
         provider: session.provider,
         account: session.account as ContractAddress,
         contract: contractAddress,
@@ -807,7 +814,7 @@ export default function App() {
       operationArgs = [selectedCase.id, expectedRevision]
     }
     const nextRevision = String(BigInt(expectedRevision) + 1n)
-    await runWrite({
+    await runWrite('F5', {
       provider: session.provider,
       account: session.account as ContractAddress,
       contract: contractAddress,
@@ -878,12 +885,18 @@ export default function App() {
         <TransactionProgress progress={writeProgress} onReconcile={writeProgress.phase === 'RECONCILIATION_REQUIRED' ? reconcileProgress : undefined} />
         {pendingEntries.length > 0 && <div className="banner pending"><span className="banner-icon">↻</span><span>{pendingLabel(pendingEntries[0])} has a pending transaction that must be reconciled before another action.</span>{pendingEntries[0].tx_hash && pendingContextMatches ? <button className="banner-action" type="button" disabled={busyAction !== null} onClick={() => void reconcilePending(pendingEntries[0])}>{busyAction === `reconcile:${pendingEntries[0].reservation}` ? 'Checking…' : 'Reconcile'}</button> : <span className="pending-note">{pendingEntries[0].tx_hash ? 'Read-only: different network' : 'Awaiting transaction evidence'}</span>}</div>}
 
-        {journalEntries.length > 0 && <section className="journal-panel panel" aria-label="Transaction recovery journal">
+        <section className="journal-panel panel" aria-label="Transaction recovery and E2E evidence">
           <div className="journal-heading">
             <div><p className="eyebrow">Recovery</p><h2>Transaction journal</h2></div>
-            <div className="journal-actions"><span className="journal-capacity">{journalEntries.length}/32 records</span><button className="quiet-button" type="button" onClick={exportJournal}>Export</button></div>
+            <div className="journal-actions">
+              <span className="journal-capacity">{journalEntries.length}/32 records</span>
+              <button className="quiet-button" type="button" onClick={startRpcCapture}>Start E2E capture</button>
+              <button className="quiet-button" type="button" onClick={exportRpcEvidence}>Export RPC evidence</button>
+              <button className="quiet-button" type="button" onClick={exportJournal}>Export journal</button>
+            </div>
           </div>
           <div className="journal-list">
+            {visibleJournalEntries.length === 0 && <p className="journal-state">No transaction records in this browser.</p>}
             {visibleJournalEntries.map((entry) => {
               const currentContext = entry.chain === String(genlayerChain.id)
               const contractMatches = Boolean(contractAddress) && entry.contract.toLowerCase() === contractAddress?.toLowerCase()
@@ -901,7 +914,7 @@ export default function App() {
             })}
           </div>
           {journalPageCount > 1 && <div className="journal-pagination"><button className="quiet-button" type="button" disabled={journalPage === 0} onClick={() => setJournalPage((page) => page - 1)}>Previous</button><span>Page {journalPage + 1} of {journalPageCount}</span><button className="quiet-button" type="button" disabled={journalPage >= journalPageCount - 1} onClick={() => setJournalPage((page) => page + 1)}>Next</button></div>}
-        </section>}
+        </section>
 
         <div className="workspace-grid">
           <CaseList ids={caseIds} selectedId={selectedId} count={caseCount} loading={loadingCases} onSelect={loadCase} onRefresh={() => void refreshCases()} />

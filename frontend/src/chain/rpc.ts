@@ -1,3 +1,5 @@
+import { setRpcEvidenceAttempt } from '../evidence/rpc-ledger'
+
 export const RPC_RETRY_POLICY = Object.freeze({
   maxAttempts: 3,
   baseDelayMs: 500,
@@ -210,6 +212,7 @@ export async function withRpcRetry<T>(operation: () => Promise<T>, options: RpcR
 
   while (true) {
     throwIfAborted(options.signal)
+    setRpcEvidenceAttempt(attempt + 1)
     options.beforeAttempt?.()
     try {
       return await operation()

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "status": "BLOCKED_PLATFORM",
+  "measurementMode": "MEASUREMENT_UNAVAILABLE",
+  "measurementStatus": "The connected Chrome extension control surface exposes accessibility, page DOM, console logs and page-assets only; its backend advertises no CDP capability. A direct documented CDP capability probe against the same retained tab was rejected by the browser security policy because Full CDP access is disabled. The page-evaluate surface exposes no window fetch, performance or event-listener instrumentation, and Chrome has no remote-debugging endpoint. No physical RPC count is claimed or inferred.",
+  "startedAt": "N/A (capture began before timestamp instrumentation)",
+  "endedAt": "2026-09-06T17:18:36+07:00",
+  "project": "contract-spec-abi-conformance-gate",
+  "head": "cfb12d62bc21ca740492b98e5b196d9963341c34",
+  "deploymentId": "dpl_HjzbRyUtgFpdwByQEVAQY4wxDumg",
+  "releaseUrl": "https://contract-spec-abi-conformance-gate.vercel.app/",
+  "tabId": "1145400381",
+  "contract": "0xBf6DF2A308D0C9916dBC6a15b0325CBdc9D8498D",
+  "account": "0xe8d6c55838c39301c11d54fc9a38b9de298329f6",
+  "stateMachine": [
+    "READY_TO_START",
+    "RUNNING",
+    "WAITING_FOR_USER_SIGNATURE",
+    "VERIFYING_TRANSACTION",
+    "RUNNING",
+    "SWEEPING",
+    "BLOCKED_PLATFORM"
+  ],
+  "rows": {
+    "F0": {
+      "status": "PASS_OBSERVED",
+      "observation": "Fresh load started disconnected; no automatic chain UI result appeared before explicit refresh/connect actions.",
+      "actualChainRequests": "UNOBSERVABLE"
+    },
+    "F1": {
+      "status": "PASS_OBSERVED",
+      "observation": "Explicit Refresh cases returned 3 visible cases.",
+      "actualChainRequests": "UNOBSERVABLE"
+    },
+    "F2": {
+      "status": "PASS_OBSERVED",
+      "observation": "Explicit case selection returned case 2 revision 1 and the record surface.",
+      "actualChainRequests": "UNOBSERVABLE"
+    },
+    "F3": {
+      "status": "PASS_OBSERVED",
+      "observation": "Chooser presented exactly one detected option, OKX Wallet; connection committed account 0xe8d6...29f6 and the public badge showed OKX Wallet.",
+      "actualProviderRequests": "UNOBSERVABLE"
+    },
+    "F4": {
+      "status": "PASS_OBSERVED",
+      "transactionHash": "0x4002d15a0d4b5d9d9441908c15809b235701b3bed92e76f78f250342c76d1f39",
+      "observation": "One create_case write returned a hash immediately, entered FINALITY_UNCERTAIN, retained the hash, and explicit Continue verification produced SUCCESS and case 3.",
+      "transactionCount": 1,
+      "duplicateSubmissions": 0,
+      "actualRpcRequests": "UNOBSERVABLE"
+    },
+    "F5_replace": {
+      "status": "PASS_OBSERVED",
+      "transactionHash": "0x174d68e7e91fd7fb997364595f864d727e8b11126f2fc6b60c7c37e8d4250f46",
+      "observation": "One replace_base write finalized with SUCCESS and revision 2.",
+      "transactionCount": 1,
+      "duplicateSubmissions": 0,
+      "actualRpcRequests": "UNOBSERVABLE"
+    },
+    "F5_freeze": {
+      "status": "PASS_OBSERVED",
+      "transactionHash": "0x671561d5fb059a1a0583b13bf35d30239aed7a4f97e68f7761bf22e951914ff8",
+      "observation": "One freeze_case write finalized through explicit Continue verification with SUCCESS, revision 3, DONE, CONFORMANT and IMPLEMENTS.",
+      "transactionCount": 1,
+      "duplicateSubmissions": 0,
+      "actualRpcRequests": "UNOBSERVABLE"
+    },
+    "F6": {
+      "status": "PARTIAL_OBSERVED",
+      "observation": "The create and freeze journeys exercised retained-hash recovery after FINALITY_UNCERTAIN without resubmission; journal rows became VERIFIED. The exact reload-before-terminal controlled fixture was not separately isolated, and a physical request ledger was unavailable.",
+      "transactionCount": 0,
+      "duplicateSubmissions": 0,
+      "actualRpcRequests": "UNOBSERVABLE"
+    },
+    "F7": {
+      "status": "PASS_OBSERVED",
+      "observation": "No public history polling control was present; the final reload/reconnect restored 4 VERIFIED journal records and 3 visible cases after explicit refresh.",
+      "actualChainRequests": "UNOBSERVABLE"
+    }
+  },
+  "consoleLogs": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "finalVisibleState": {
+    "wallet": "OKX Wallet connected",
+    "journal": "4 /32 records, all visible records VERIFIED",
+    "visibleCases": 3,
+    "case3": "DONE / CONFORMANT / revision 3 / IMPLEMENTS",
+    "duplicateWrites": 0
+  },
+  "blockedReason": "FRONTEND RPC BUDGET EVIDENCE requires actual per-row request/provider counts and HAR/provider-event export. On the retained tab, the browser backend advertised only pageAssets, while its documented CDP command was rejected because Full CDP access is disabled and the policy expressly prohibited a raw or alternate-surface workaround. Replaying the three already verified writes solely to measure them would violate the no-duplicate-write and RPC-economy rules. Deriving counts from transaction totals or UI observations would fabricate evidence."
+}

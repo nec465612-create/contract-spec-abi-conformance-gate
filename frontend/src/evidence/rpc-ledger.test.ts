@@ -1,0 +1,28 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beginRpcEvidence, instrumentClientRequest, instrumentProvider, withEvidenceRow } from './rpc-ledger'
+
+describe('RPC evidence ledger', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.stubGlobal('crypto', { randomUUID: () => 'run-1' })
+  })
+
+  it('records requests but never their parameters or account results', async () => {
+    beginRpcEvidence()
+    const rawClient: { request(request: { method: string }): Promise<unknown> } = { request: vi.fn(async () => '0x' + 'a'.repeat(64)) }
+    const client = instrumentClientRequest(rawClient)
+    const provider = instrumentProvider({ request: vi.fn(async () => ['0xsecret']) })
+    await withEvidenceRow('F4', async () => {
+      await client.request({ method: 'gen_getTransaction' } as never)
+      await provider.request({ method: 'eth_accounts', params: ['must-not-persist'] })
+    })
+    const stored = localStorage.getItem('genlayer-rpc-evidence-v1') ?? ''
+    const ledger = JSON.parse(stored) as { events: Array<Record<string, unknown>> }
+    expect(ledger.events).toMatchObject([
+      { seq: 1, row: 'F4', channel: 'chain', method: 'gen_getTransaction', attempt: 1, status: 'SUCCESS' },
+      { seq: 2, row: 'F4', channel: 'provider', method: 'eth_accounts', attempt: 1, status: 'SUCCESS' },
+    ])
+    expect(stored).not.toContain('must-not-persist')
+    expect(stored).not.toContain('0xsecret')
+  })
+})
