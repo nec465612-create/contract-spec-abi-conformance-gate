@@ -1,4 +1,4 @@
-import type { CalldataEncodable } from 'genlayer-js/types'
+import { TransactionHashVariant, type CalldataEncodable } from 'genlayer-js/types'
 import type { Address } from 'genlayer-js/types'
 import { getReadClient, type ContractAddress, type GenLayerClient } from './config'
 import { isRecord, stableStringify } from '../lib/encoding'
@@ -447,6 +447,7 @@ export class ContractGateway {
         address: this.address as Address,
         functionName,
         args,
+        transactionHashVariant: TransactionHashVariant.LATEST_FINAL,
       })), { beforeAttempt: budget?.spend }))
   }
 

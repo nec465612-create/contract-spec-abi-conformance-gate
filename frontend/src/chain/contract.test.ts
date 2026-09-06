@@ -66,8 +66,9 @@ describe('contract read boundary', () => {
     const page = (id: string): CasePage => ({ ids: [id], next: '0' })
     const firstClient = {
       chain: { id: 61999 },
-      readContract: vi.fn(async (request: { account?: unknown }) => {
+      readContract: vi.fn(async (request: { account?: unknown; transactionHashVariant?: unknown }) => {
         expect(request.account).toEqual({ address, type: 'json-rpc' })
+        expect(request.transactionHashVariant).toBe('latest-final')
         return page('first')
       }),
     } as unknown as GenLayerClient
